@@ -1,6 +1,7 @@
 import Data.Functor
 import Control.Applicative
 import Control.Monad
+import Control.Concurrent.STM
 
 data Tree a = (Tree a) :+ (Tree a)
             | Leaf a
@@ -53,25 +54,35 @@ modTestM t f = do
 modTestA t f =
   pure f <*> t
 
-ifTestM :: Monad m => m a -> (a -> Bool) -> (a -> m b) -> (a -> m b) -> m b
-ifTestM mo p t e = do
+condWriteM :: Monad m => m a -> (a -> Bool) -> m b -> m b -> m b
+condWriteM mo p t e = do
   x <- mo 
   if p x 
-     then t x
-     else e x
+     then t 
+     else e
 
-ifTestA :: Applicative f => f a -> (a -> Bool) -> (f (a -> b)) -> (f (a -> b)) -> f b
-ifTestA ap p t e = 
+condWriteA :: Applicative f => f a -> (a -> Bool) -> f b -> f b -> f b
+condWriteA ap p t e = 
   pure specialIf <*> pure p <*> t <*> e <*> ap  
 
-testA t1 = ifTestA t1 (< 3) (pure (subtract 1)) (pure (+ 1)) 
-{-
-testWrite t1 t2 t3 = 
-  ifTestA (readTVar t1) odd (writeTVar t2) (writeTVar t3) 
--}
-specialIf :: (a -> Bool) -> (a -> b) -> (a -> b) -> a -> b
-specialIf p t e v = if p v then t v else e v 
-  
+testA t1 = condWriteA t1 (< 3) [1] [24,2] 
+
+apWrite :: TVar Int -> TVar Int -> TVar Int -> STM ()
+apWrite t1 t2 t3 = condWriteA (readTVar t1) (< 6) (writeTVar t2 5) (writeTVar t3 5)
+
+moWrite :: TVar Int -> TVar Int -> TVar Int -> STM ()
+moWrite t1 t2 t3 = condWriteM (readTVar t1) (< 3) (writeTVar t2 5) (writeTVar t3 5)
+
+main = do
+  [t1,t2,t3] <- atomically $ sequence $ map newTVar [0,0,0]
+  atomically $ moWrite t1 t2 t3
+  val <- atomically $ sequence $ map readTVar [t1,t2,t3]
+  print val
+
+specialIf :: (a -> Bool) -> b -> b -> a -> b
+specialIf p t e v = if p v then t else e  
+
+testTree1 = [1..5]  
 
 fromList :: [a] -> Tree a
 fromList [a] = Leaf a
