@@ -29,7 +29,7 @@ waitZero tvar =
 readAndModify :: TVar a -> (a -> a) -> STM a 
 readAndModify tv f = res
   where val = readTVar tv
-        res = modifyVal val f 
+        res = pure f <*> val 
 
 perform :: Int -> [TVar Int] -> IO ()
 perform 0 _ = return ()

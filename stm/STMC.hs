@@ -1,12 +1,14 @@
 module STMC
         (STM, TVar, newTVar, readTVar, writeTVar,
-         modifyVal, atomically, result, (<%>)) where
+         atomically, result, (<%>), pure, (<*>),
+         replaceConstraint) where
 
 import Control.Concurrent.MVar
 import System.IO.Unsafe (unsafePerformIO)
 import Unsafe.Coerce
 import qualified Data.IntMap.Strict as IntMap
-
+import Control.Applicative
+import Data.Maybe (fromJust) 
 
 -------------------
 -----STM types-----
@@ -15,6 +17,18 @@ import qualified Data.IntMap.Strict as IntMap
 type ID = Int
 
 data STM a = STM (StmState -> STMResult a)
+
+instance Functor STM where
+  fmap f (STM tr) = STM (\state -> 
+        let Success newState res = tr state
+          in Success newState (fmap f res))
+
+instance Applicative STM where
+  pure a = STM (\stmState -> Success stmState (return a))
+  (STM f) <*> (STM tr) = STM (\stmState -> 
+                        let Success interimState arg = tr stmState
+                            Success newState fun     = f interimState
+                           in Success newState (fun <*> arg))
 
 class Sequence f where
   (<%>)  :: f a -> f b -> f b
@@ -37,6 +51,7 @@ instance Sequence STM where
 
 data StmState = TST {touchedTVars :: IntMap.IntMap (IO (IO())),
                      writeSet     :: IntMap.IntMap (IO (), IO (IO(),Bool)),
+                     conMods      :: IntMap.IntMap ((),IO()),
                      notifys      :: IO(),
                      wait         :: IO(),
                      retryMVar    :: MVar ()}
@@ -48,6 +63,7 @@ initialState = do
    rmv <- newEmptyMVar 
    return (TST {touchedTVars = IntMap.empty,
                 writeSet     = IntMap.empty,
+                conMods     = IntMap.empty,
                 notifys      = return (),
                 wait         = return (),
                 retryMVar    = rmv})
@@ -55,7 +71,7 @@ initialState = do
 data TVar a = TVar (MVar a)
                    ID
                    (MVar [MVar ()])
-                   (a -> Bool)
+                   (MVar (a -> Bool))
                    (MVar ())
 
 -----------------------
@@ -69,8 +85,9 @@ newTVar val con = STM (\stmState ->
            nl <- newMVar ()
            id <- getGlobalId
            mv <- newMVar val
+           nc <- newMVar con
            newWaitQ <- newMVar []
-           return $ TVar mv id newWaitQ con nl
+           return $ TVar mv id newWaitQ nc nl
 
 readTVar :: TVar a -> STM a 
 readTVar (TVar mv id waitQ _ l) = STM (\stmState -> 
@@ -90,7 +107,7 @@ readTVar (TVar mv id waitQ _ l) = STM (\stmState ->
                 in Success newState (readMVar mv))
 
 writeTVar :: TVar a -> STM a -> STM ()
-writeTVar (TVar mv id waitQ c l) (STM val) = STM (\stmState -> 
+writeTVar (TVar mv id waitQ mc l) (STM val) = STM (\stmState -> 
    let Success interimState res = val stmState
        newState = interimState{
                     touchedTVars = if IntMap.member id (touchedTVars stmState)
@@ -100,16 +117,35 @@ writeTVar (TVar mv id waitQ c l) (STM val) = STM (\stmState ->
                                                       (touchedTVars stmState),
                     writeSet = IntMap.insert id (unsafeCoerce res,do
                                                    v <- res
+                                                   c <- readMVar mc
                                                    return (do {takeMVar mv; putMVar mv v}, 
                                                            c v))
                                              (writeSet interimState),
                     notifys = notifys stmState >> fNotify waitQ}
      in Success newState (return ()))
 
-modifyVal :: STM a -> (a -> a) -> STM a
-modifyVal (STM tr) f = STM (\stmState -> 
-                        let Success newState res = tr stmState 
-                           in Success newState (fmap f res))
+replaceConstraint :: TVar a -> (a -> Bool) -> STM ()
+replaceConstraint (TVar mv id waitQ mc l) c = STM (\stmState ->  
+  let newState = stmState{
+                    touchedTVars = if IntMap.member id (touchedTVars stmState)
+                                   then touchedTVars stmState
+                                   else IntMap.insert id
+                                                      (lock l) 
+                                                      (touchedTVars stmState),
+                    writeSet = IntMap.insertWith (flip const) id (unsafeCoerce (readMVar mv),do
+                                                   v <- readMVar mv
+                                                   c <- readMVar mc
+                                                   return (do {takeMVar mv; putMVar mv v}, 
+                                                           c v))
+                                             (writeSet stmState),
+                    conMods = IntMap.insert id (unsafeCoerce c, do {takeMVar mc; putMVar mc c})
+                                             (conMods stmState),
+                    notifys = notifys stmState >> fNotify waitQ,
+                    wait = do 
+                         queue <- takeMVar waitQ 
+                         putMVar waitQ (retryMVar stmState : queue)
+                         wait stmState}
+     in Success newState (return ()))
 
 atomically :: STM a -> IO a
 atomically stmAction = do
@@ -121,9 +157,11 @@ atomically stmAction = do
         case stmAction state of
           Success newState res -> do
             unlock <- sequence $ map snd $ IntMap.toAscList $ touchedTVars newState
-            (writes, valid) <- validate $ writeSet newState
-            if valid 
+            (newCons,valid1) <- conCheck (conMods newState) (writeSet newState)
+            (writes, valid2) <- validate $ IntMap.difference (writeSet newState) (conMods newState)
+            if valid1 && valid2 
                 then do
+                  newCons
                   notifys newState
                   writes
                   sequence unlock
@@ -145,6 +183,17 @@ lock :: MVar () -> IO (IO())
 lock mv = do
   takeMVar mv
   return (putMVar mv ())
+
+conCheck :: IntMap.IntMap ((),IO()) -> IntMap.IntMap (IO (), IO(IO(),Bool)) -> IO (IO(),Bool)
+conCheck nc ws = conCheck' (return ()) (IntMap.toList nc) ws
+  where conCheck' acc [] _ = return (acc, True)
+        conCheck' acc ((id,(c,ac)):xs) ws = do
+           (val,ioac) <- unsafeCoerce $ fromJust $ IntMap.lookup id ws
+           (wrac,_) <- ioac
+           if (unsafeCoerce c) val 
+             then conCheck' (acc >> wrac >> ac) xs ws
+             else return (return (), False)
+
 
 validate :: IntMap.IntMap (IO (), IO(IO(),Bool)) -> IO (IO(),Bool)
 validate ws = validate' (return ()) $ map (snd . snd) $ IntMap.toList ws
