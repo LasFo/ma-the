@@ -1,7 +1,8 @@
 module STM
            (STM(STM), STMResult(Success), TVar(TVar), 
-            newTVar, readTVar, writeTVar, 
-            atomically, retry, orElse, proc) where
+            newTVar, readTVar, writeTVar, LazyValue,
+            readTVarLazy, writeTVarLazy, (<*>), pure,
+            atomically, retry, orElse, proc, evalLazyVal) where
 
 import qualified Data.IntMap.Lazy as IntMap
 import Prelude
@@ -96,10 +97,10 @@ readTVar (TVar tVarRef id waitQ l) = STM (\stmState -> do
           return (Success stmState (unsafeCoerce v))
         Nothing -> 
           case IntMap.lookup id (lazyWSet stmState) of
-            Just v -> do let LV act wqs = unsafeCoerce v
-                         enter wqs (retryMVar stmState)
-                         val <- act
-                         return (Success stmState val)
+            Just (v,_) -> do let LV act wqs = unsafeCoerce v
+                             enter wqs (retryMVar stmState)
+                             val <- act
+                             return (Success stmState val)
             Nothing -> do
               queue <- takeMVar waitQ
               putMVar waitQ $ retryMVar stmState:queue     
@@ -113,10 +114,10 @@ readTVar (TVar tVarRef id waitQ l) = STM (\stmState -> do
 readTVarLazy :: TVar a -> STM (LazyValue a)
 readTVarLazy (TVar mv id waitQ l) = STM (\stmState -> do
    case IntMap.lookup id (normalWSet stmState) of
-     Just v -> return (Success stmState (pure (unsafeCoerce v)))
+     Just (v,_) -> return (Success stmState (pure (unsafeCoerce v)))
      Nothing -> 
        case IntMap.lookup id (lazyWSet stmState) of
-          Just v -> return (Success stmState (unsafeCoerce v))
+          Just (v,_) -> return (Success stmState (unsafeCoerce v))
           Nothing -> do 
               let newState = stmState{
                       touchedTVars = case lookup id (touchedTVars stmState) of
@@ -207,6 +208,9 @@ orElse (STM stm1) (STM stm2) =
 -------------------
 -- Miscellaneous --
 -------------------
+
+evalLazyVal :: LazyValue a -> IO a
+evalLazyVal (LV act _) = act
 
 enter :: [MVar [MVar ()]] -> MVar () -> IO()
 enter [] _ = return ()
