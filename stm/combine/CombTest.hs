@@ -9,7 +9,7 @@ import Data.List (sort)
 tvars = 3
 
 main = do 
-  tvs <- M.atomically $ sequence $ replicate tvars (M.newTVar 0 (>0))
+  tvs <- M.atomically $ sequence $ replicate tvars (M.newTVar 0 (>0)) --also possible as C.atomi...
   sequence $  map (forkIO . increaser) tvs
   sortPrint tvs
   

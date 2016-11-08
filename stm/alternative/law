@@ -1,0 +1,49 @@
+pure (.) <*> u <*> v <*> w =
+(\state -> do
+  success interimstate res <- u state
+  success newstate res1 <- v interimState
+  success fstate res2 <- w fstate
+  success fstate (((.) res) res1) res2))=
+(\state -> do
+  success interimstate res <- u state
+  success newstate res1 <- v interimState
+  success fstate res2 <- w fstate
+  success fstate ((.) res res1) res2))=
+(\state -> do
+  success interimstate res <- u state
+  success newstate res1 <- v interimState
+  success fstate res2 <- w fstate
+  success fstate (res . res1) res2))=
+(\state -> do
+  success interimstate res <- u state
+  success newstate res1 <- v interimState
+  success fstate res2 <- w fstate
+  success fstate (res (res1 res2))=
+u <*> (\state -> do 
+          success newstate res1 <- v state
+          success fstate res2 <- w newstate
+          success fstate (res1 res2))=
+u <*> (v <*> w)
+
+
+pure f <*> pure x = 
+(\state -> do
+  success state f <- (pure f) state
+  success state x <- (pure x) state
+  success state (f x))=
+pure (f x)
+
+
+u <*> pure y = 
+(\state <-
+   success newstate res <- u state
+   success newstate y <- (pure y) newstate
+   success newstate (res y))=
+(\state <- 
+  success state ($ y) <- (pure ($ y)) state
+  success newstate res <- u state
+  success newstate (res y))
+pure ($ y) <*> u
+
+
+

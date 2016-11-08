@@ -38,7 +38,7 @@ perform n tvs = do
   atomically $ 
       let tvs' = map (tvs!!) positions
           fun tv = writeTVar tv (readAndModify tv (+1))
-       in foldr (<%>) (result []) (map fun tvs')
+       in foldr (*>) (result []) (map fun tvs')
   perform (n-1) tvs
 
 

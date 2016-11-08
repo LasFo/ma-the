@@ -12,8 +12,8 @@ iter    = 1000
 tvars   = 20
 changes = 10
 
-main = do sync <- atomically $ newTVar 0 (>= 0)
-          ts <- atomically $ result $ replicate tvars (newTVar 0 (>= 0))
+main = do sync <- atomically $ newTVar 0 (>= 0) --using constraint for implicit retry
+          ts <- atomically $ result $ replicate tvars (newTVar 0 (>= 0)) --const True would be fine too
           sequence $ replicate threads (forkIO $ do
                                            perform iter ts 
                                            atomically $ writeTVar sync (readAndModify sync (+ 1)))
@@ -26,6 +26,8 @@ waitZero tvar =
   let sval = readAndModify tvar (subtract threads)
     in writeTVar tvar sval
 
+--common function which could be integrated in to the libraby
+--modify would be usefull as well
 readAndModify :: TVar a -> (a -> a) -> STM a 
 readAndModify tv f = res
   where val = readTVar tv

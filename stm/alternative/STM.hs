@@ -1,6 +1,6 @@
 module STM
            (STM, TVar, newTVar, readTVar, writeTVar, 
-            atomically, retry, orElse, proc) where
+            atomically, retry, orElse, proc)where
 
 import Prelude
 import Control.Concurrent
@@ -8,6 +8,7 @@ import Data.IORef
 import System.IO.Unsafe
 import Unsafe.Coerce
 import Control.Applicative
+import Control.Monad (ap)
 
 -----------------------
 -- The STM interface --
@@ -16,8 +17,8 @@ import Control.Applicative
 type ID = Integer
 
 -- The STM monad itself
-data STM a = STM (StmState -> STMResult a)
-{-
+data STM a = STM (StmState -> IO (STMResult a))
+
 instance Monad STM where
   (STM tr1)  >>= k = STM (\state -> do
                           stmRes <- tr1 state
@@ -30,32 +31,60 @@ instance Monad STM where
                             InValid -> return InValid
                        )
   return x      = STM (\state -> return (Success state x))
- -}
 
 instance Functor STM where 
-  fmap f (STM t) = STM (\state ->let Success newState a = t state 
-                                   in return (Success newState (fmap f a))
+  fmap f (STM t) = STM (\state -> do 
+                           stmRes <- t state
+                           case stmRes of 
+                             Success newState a -> return (Success newState (f a))
+                             Retry newState -> return (Retry newState)
+                             InValid -> return InValid)
+
+--instance Applicative STM where
+--  pure = return
+--  (<*>) = ap
+
 
 instance Applicative STM where
-  pure x = STM (\state -> Success state (return x))
+  pure x = STM (\state -> return (Success state x))
 
-  (STM tr1) <*> (STM tr2) = STM (\state ->  
-                                     let Success newState a = tr2 state 
-                                         Success finState b = tr1 newState  
-                                       in Success finState (fmap b a))
-                                               
-                                          
+  (STM act1) <*> tr2 = STM (\state -> do 
+                                     stmRes <- act1 state 
+                                     case stmRes of 
+                                        Success newState f ->
+                                           let STM act2 = fmap f tr2
+                                                in act2 newState                                        
+                                        Retry newState -> return (Retry newState)
+                                        InValid -> return InValid)
+  
+instance Alternative STM where 
+  empty = retry
+  (<|>) = orElse
+ {-some (STM v) = STM (\state -> do
+        (sol,newState) <- help v state
+        return (Success newState sol))
+    where help :: (StmState -> IO (STMResult a)) -> StmState -> IO ([a],StmState)
+          help f s = do 
+              res <- f s
+              case res of 
+                Success newState res1 -> do
+                   (r,state) <- help f newState
+                   return ((res1 : r), state)
+                Retry newState -> return ([],newState)
+   -}                                         
 -- Usually it is more efficient to perform IO actions then iterate through list.
 -- We use Lists for collecting writtenValues.
 -- A Data.Map should be more efficient.
 data StmState = TST {touchedTVars  :: [ID],   -- not used, but collected for alternative locking
 		     isValid       :: IO Bool,
-                     writtenValues :: IntMap.IntMap ((),IO()), -- (id,(unsafeCoerced Value, Commit action))
+                     writtenValues :: [(ID,((),IO()))], -- (id,(unsafeCoerced Value, Commit action))
 		     notifys       :: IO (),
 		     wait          :: IO (),
                      retryMVar     :: MVar ()}
 
-data STMResult a = Success StmState (IO a)
+data STMResult a = Retry StmState
+	         | InValid
+		 | Success StmState a
 
 initialState :: IO StmState
 initialState = do
@@ -69,44 +98,57 @@ initialState = do
                retryMVar     = rMVar})
 
 -- Transactional variables
-data TVar a = TVar (MVar a)  -- global TVar itself. Warum IORef?? Zum Vergleichen??
+data TVar a = TVar (MVar (IORef a))  -- global TVar itself. Warum IORef?? Zum Vergleichen??
                    ID                -- TVar identifier
                    (MVar [MVar ()])  -- wait queue on retry
-                   (a -> Bool)       -- constraint
 
 --werden diese wieder geloescht??
-newTVar   :: a -> (a -> Bool) -> STM (TVar a)
-newTVar v c = STM (\stmState -> pure $ do 
+newTVar   :: a -> STM (TVar a)
+newTVar v = STM (\stmState -> do
                     id <- getGlobalId
-                    newTVar <- newMVar v
+                    newTVarVal <- newIORef v
+                    newTVarRef <- newMVar newTVarVal
                     newWaitQ <- newMVar []
-                    return $ TVar newTVar id newWaitQ c)
+                    let tVar = TVar newTVarRef id newWaitQ
+		    return (Success stmState tVar))
 
-readTVar :: TVar a -> STM a
-readTVar (TVar mv id waitQ _) = STM (\stmState -> 
+--warum Show a?? oder debug Ueberreste?
+readTVar  :: Show a => TVar a -> STM a
+readTVar (TVar tVarRef id waitQ) = STM (\stmState ->
     case lookup id (writtenValues stmState) of
-     Just (v,_) -> Success stmState (unsafeCoerce v)
-     Nothing -> 
+      Just (v,_) -> do
+                 --putStr "WR "
+                 return (Success stmState (unsafeCoerce v))
+      Nothing -> do
+         tVarVal <- readMVar tVarRef
          let newState = stmState{touchedTVars = id:touchedTVars stmState,
-                                 wait = do
+                                 isValid = do --IORef fuer diesen Vergleich? 
+                                      tVarVal' <- readMVar tVarRef
+	  			      (return (tVarVal==tVarVal') 
+				       >>+ isValid stmState),
+                                 wait = do 
 				      queue <- takeMVar waitQ
                                       putMVar waitQ 
 					      (retryMVar stmState:queue) --mehrfach Vorkommen?
                                       wait stmState}
-           in (Success newState (readMVar mv))
+         val <- readIORef tVarVal
+         return (Success newState val))
 
-writeTVar :: Show a => TVar a -> STM (a -> ())
-writeTVar (TVar mv id waitQ _)  ac = STM (\stmState -> do
+
+writeTVar :: Show a => TVar a -> a -> STM ()
+writeTVar (TVar tVarRef id waitQ) v = STM (\stmState -> do
    let newState = 
          stmState{touchedTVars = if elem id (touchedTVars stmState)
                                    then touchedTVars stmState
                                    else id:touchedTVars stmState,
-                  writtenValues = IntMap.insert id (unsafeCoerce ac, do 
-                                                      )
+                  writtenValues = replace id (unsafeCoerce v,do 
+                                                 ref <- newIORef v
+                                                 takeMVar tVarRef
+                                                 putMVar tVarRef ref)
                                           (writtenValues stmState),
                         --mehrfach Benachrichtigung?
                   notifys = notifys stmState >> fNotify waitQ}
-      in Success newState (return ()))
+   return (Success newState ()))
 
 -- Running STM computations
 atomically :: STM a -> IO a
@@ -119,26 +161,32 @@ atomically stmAction = do
       stmResult <- startSTM stmAction state
       case stmResult of
         Retry newState -> do
+          --putStr "W "
  	  wait newState
           takeMVar (retryMVar state)   -- suspend
+          --putStr "A "
           atomically' stmAction state
 	InValid -> do
+          --putStrLn "! "
           atomically' stmAction state
         Success newState res -> do
+          --putStr "s "
           takeMVar globalLock
           valid <- isValid newState
           if valid
             then do
+              --putStrLn ("+ "++show (map fst (writtenValues newState)))
               sequence_ $ map (snd . snd) (writtenValues newState)
               notifys newState
               putMVar globalLock ()
               return res
             else do
+              --putStr "*"
               putMVar globalLock ()
     	      atomically' stmAction state
 
-retry :: STM a
-retry = 
+retry  :: STM a
+retry =
   STM (\stmState -> do
          takeMVar globalLock        
          valid <- isValid stmState  -- This validity check could also be done in atomically

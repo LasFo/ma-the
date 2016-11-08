@@ -8,10 +8,10 @@ import qualified STMM as M
 import System.Random
 import Data.List
 
-threads = 5
-iter    = 10000
-tvars   = 20
-changes = 10
+threads = 25
+iter    = 1000
+tvars   = 40
+changes = 20
 
 main = do sync <- M.atomically $ M.newTVar (threads) (>= 0)
           ts <- C.atomically $ C.result $ replicate tvars (C.newTVar 0 (>= 0))
