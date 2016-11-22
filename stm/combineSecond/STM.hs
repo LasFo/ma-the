@@ -2,7 +2,7 @@ module STM
            (STM(STM), STMResult(Success), TVar(TVar), 
             newTVar, readTVar, writeTVar, 
             atomically, retry, orElse, (<**>),
-            (**>), (<*>), (*>), pure) where
+            (**>), (<*>), (*>), pure, T.sequenceA) where
 
 import Prelude
 import Control.Concurrent
@@ -14,6 +14,7 @@ import Data.List (sortBy,delete,union)
 import Data.Maybe (isNothing)
 import qualified Data.IntMap.Lazy as IntMap
 import Control.Applicative
+import qualified Data.Traversable as T
 
 -----------------------
 -- The STM interface --
@@ -133,7 +134,10 @@ writeTVar (TVar mv id waitQ lock) (STM tr) = STM (\stmState -> do
                              writeSet = IntMap.insert id 
                                             (unsafeCoerce act,unsafeCoerce mv,wqs)
                                             (writeSet stmState),
-                             notifys = notifys stmState >> fNotify waitQ} in
+                             notifys = --if IntMap.member id (writeSet stmState)
+                                         --then notifys stmState else --multiple notifys are cheaper
+                                         --than lookup in the map
+                                         notifys stmState >> fNotify waitQ} in
                  return (Success newState [] (return ())) 
            Retry newState -> return $ Retry newState
            InValid -> return InValid)
@@ -149,7 +153,7 @@ atomically stmAction = do
       stmResult <- startSTM stmAction state
       case stmResult of
         Retry newState -> do
-          takeMVar (retryMVar state)   -- suspend
+          takeMVar (retryMVar state) 
           rMVar <- newEmptyMVar
           let reState = state{retryMVar = rMVar}
           atomically' stmAction reState
@@ -159,7 +163,7 @@ atomically stmAction = do
           atomically' stmAction reState
         Success newState _ res -> do --hier sollte man sich ueberlegen, ob die waitQs wichtig sind
           unlocker <- sequence $ IntMap.elems (touchedTVars newState)
-          valid <- tryTakeMVar $ retryMVar newState --check validity
+          valid <- tryTakeMVar $ retryMVar newState 
           if isNothing valid
             then do
               mapM_ write $ IntMap.elems (writeSet newState)

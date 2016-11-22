@@ -8,6 +8,24 @@ import qualified Data.Traversable as T
 import System.Random
 import Data.List
 
+--This is the core test case for STM. It is also used for 
+--timing test, since it is configurable.
+--It depends on four variable, which can be adjusted to control the test:
+--threads: is the number of threads which work parallel
+--iter:    is the number of transactions which ever thread executes
+--tvars:   is the number of tvars the threads are working on
+--changes: is the number of increment operations per transactions.
+--At first the test spawns *tvars* with 0 initialized tvars. 
+--Second the test spawns *threads* threads.
+--Each thread knows ever tvars. Each thread performs *iter* times a transaction.
+--Before each transaction the thread chooses randomly *changes* tvar(the same
+--TVar may occur multiple times). After the TVars are chooses a transaction is 
+--evoked, which increments these TVars.
+--After every trancsaction is finished, all tvars are read and the values are summed.
+--If the core of the STM implementation is correct the result will always be the same,
+--namely: threads * iter * changes.
+--Otherwhise the result may vary or the test case deadlocks.
+
 threads = 5
 iter    = 100
 tvars   = 20
