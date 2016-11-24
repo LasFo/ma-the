@@ -10,9 +10,10 @@ alternativetitlepage=true,% Use the fancy title page.
 
 \usepackage{parcolumns}
 \usepackage{listings} 
+\usepackage{subfig}
 \author{Lasse Folger}
 \title{\huge Software Transaction Roll Back Avoidance}
-\subtitle{Master Proposal Talk ???}
+\subtitle{Master Proposal Talk}
 \date{\today}
 
 \lstset{escapeinside=!!}
@@ -27,51 +28,64 @@ alternativetitlepage=true,% Use the fancy title page.
     \lstinputlisting{ressources/accountMVar.hs}
   \end{frame}
   
-  \begin{frame}
+  \begin{frame}[fragile]
     \frametitle{MVar}
     \fboxsep=0pt
     \noindent
     \begin{minipage}[t]{0.48\linewidth}
-      Thread 1:\\
-      \vfill
-      transfer acc1 acc2 50
-    \end{minipage}%
+      Thread 1:
+            \begin{figure}
+       \begin{lstlisting}[frame=single]
+transfer acc1 acc2 50
+       \end{lstlisting}
+      \end{figure}
+\end{minipage}%
     \hfill%
     \begin{minipage}[t]{0.48\linewidth}
-      Thread 2:\\
-      \vfill
-      transfer acc2 acc1 50
+      Thread 2:      
+      \begin{figure}
+       \begin{lstlisting}[frame=single]
+transfer acc2 acc1 50
+       \end{lstlisting}
+      \end{figure}
     \end{minipage}
     \vfill
     \pause
     $\Rightarrow$ Deadlock
-  \end{frame}
+\end{frame}
   
   \begin{frame}
     \frametitle{Use Transactions}
     \lstinputlisting{ressources/accountTVar.hs}   
   \end{frame}
   
-  \begin{frame}
+  \begin{frame}[fragile]
     \frametitle{TVar}
     \fboxsep=0pt
     \noindent
     \begin{minipage}[t]{0.48\linewidth}
-      Thread 1:\\
-      \vfill
-      atomically \$ 
-      transfer acc1 acc2 
+      Thread 1:
+      \begin{figure}
+       \begin{lstlisting}[frame=single]
+atomically $ 
+  transfer acc1 acc2 50
+       \end{lstlisting}
+      \end{figure}
     \end{minipage}%
     \hfill%
     \begin{minipage}[t]{0.48\linewidth}
-      Thread 2:\\
-      \vfill
-      atomically \$ transfer acc2 acc1
+      Thread 2:
+      \begin{figure}
+       \begin{lstlisting}[frame=single]
+atomically $ 
+  transfer acc2 acc1 50
+       \end{lstlisting}
+      \end{figure}
     \end{minipage}
     \vfill
     \pause
     $\Rightarrow$ works fine, because transactions provide ACID properties
-  \end{frame}
+\end{frame}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%Current Implementatin%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -84,80 +98,228 @@ alternativetitlepage=true,% Use the fancy title page.
       \item composition via bind operator (or do)
     \end{itemize}
   \end{frame}
-
+  
   \begin{frame}
-   \begin{lstlisting}[language=Haskell]
-    readTVar tvar
-   \end{lstlisting}
-
+   \frametitle{Modify Operations}
+   \begin{itemize}\setlength\itemsep{1em}
+    \item \textbf{newTVar}: creates a new, initialized TVar 
+    \item \textbf{readTVar}: add the TVar and its version number to the read set
+    \item \textbf{writeTVar}: add the TVar and the value to the write set
+    \item read set and write set serve as local cache 
+  \end{itemize}
+  \end{frame}
+  
+%   \begin{frame}
+%    \frametitle{Control Flow Operations}
+%    \begin{itemize}\setlength\itemsep{1em}
+%     \item \textbf{retry}: suspends until a read TVar is written.
+%     \item \textbf{orElse}: takes two transactions
+%       \begin{itemize}
+%        \item runs the first transaction
+%        \item if the first transaction retrys it runs the second transaction
+%       \end{itemize}
+%   \end{itemize}
+%   \end{frame}
+%   
+  \begin{frame}
+   \frametitle{\lstinline{atomically :: STM a -> IO a}}
+   \begin{enumerate}\setlength\itemsep{1em}
+    \item compute the read set and write set
+    \item validate the read set
+    \item if valid commit the write set
+    \item else restart
+   \end{enumerate}
   \end{frame}
 
   \begin{frame}
    \frametitle{Validation}
-    \begin{itemize}\setlength\itemsep{1em}
-      \item validation is performed before commiting or when the thread is dispatched
-      \item validation: version numbers from TVars are matched with the read version numbers.
-      \begin{itemize}
-	\item validation fails $\Rightarrow$ restart transaction
-	\item validation succeeds $\Rightarrow$ continue transaction
-      \end{itemize}
-      \item For validation locking is needed
-    \end{itemize}
-  \end{frame}
-
-  \begin{frame}
-   \frametitle{Write Set}
-   \begin{itemize}
-    \item local workspace
-    \item writesTVars cannot to be published directly
-    \item allow to read written values to provide compositionality
-    \item in the comit phase these values are published
-   \end{itemize}
+    \begin{enumerate}\setlength\itemsep{1em}
+%       \item lock the TVars in the read set
+      \item compare version number in read set with actual version number
+      \item if there is a difference return invalid 
+      \item else return valid
+    \end{enumerate}
   \end{frame}
 
 %%%%%%%%%%%%%%%%%% 
 %%%%%Problems%%%%%
 %%%%%%%%%%%%%%%%%%
-    \begin{frame}
-    \frametitle{Problems}
+
+    \begin{frame}[fragile]
+    \frametitle{Problem}
     \fboxsep=0pt
     \noindent
     \begin{minipage}[t]{0.48\linewidth}
-      Thread 1: \\
-       a1 $\leftarrow$ readTVar acc1\\
-       a2 $\leftarrow$ readTVar acc2\\
-       writeTVar acc1 (a1 - 50)\\
-       writeTVar acc2 (a2 + 50)\\
+      Thread 1:
+    \begin{figure}
+     \begin{lstlisting}[frame=single]
+a1 <- readTVar acc2
+a2 <- readTVar acc1
+writeTVar acc2 (a1 - 50)
+writeTVar acc1 (a2 + 50)
+     \end{lstlisting}
+    \end{figure}
     \end{minipage}%
     \hfill%
     \begin{minipage}[t]{0.48\linewidth}
-      Thread 2:\\
-       a1 $\leftarrow$ readTVar acc2\\
-       a2 $\leftarrow$ readTVar acc1\\
-       writeTVar acc2 (a1 - 50)\\
-       writeTVar acc1 (a2 + 50)\\
+      Thread 2:
+    \begin{figure}
+     \begin{lstlisting}[frame=single]
+a1 <- readTVar acc2
+a2 <- readTVar acc1
+writeTVar acc2 (a1 - 50)
+writeTVar acc1 (a2 + 50)
+     \end{lstlisting}
+    \end{figure}
     \end{minipage}
     \vfill
     \pause
     $\Rightarrow$ either sequential or one transaction is rolled back
-  \end{frame}
+\end{frame}
+
+
+    \begin{frame}[fragile]
+    \frametitle{Idea}
+    \fboxsep=0pt
+    \noindent
+    \begin{minipage}[t]{0.48\linewidth}
+      Thread 1: 
+          \begin{figure}
+     \begin{lstlisting}[frame=single]
+a1 <- readTVar acc1
+writeTVar acc1 (a1 - 50)
+a2 <- readTVar acc2
+writeTVar acc2 (a2 + 50)
+     \end{lstlisting}
+    \end{figure}
+    \end{minipage}%
+    \hfill%
+    \begin{minipage}[t]{0.48\linewidth}
+      Thread 2:
+          \begin{figure}
+     \begin{lstlisting}[frame=single]
+a1 <- readTVar acc2
+writeTVar acc2 (a1 - 50)
+a2 <- readTVar acc1
+writeTVar acc1 (a2 + 50)
+     \end{lstlisting}
+    \end{figure}
+    \end{minipage}
+    \vfill
+    \pause
+    $\Rightarrow$ delay the evaluation of readTVar to avoid rollback, but...
+\end{frame}
   
-  \begin{frame}
-   \frametitle{Idea}
-      \begin{itemize}
-       \item delay the evaluation of readTVar to the comit phase 
-       \item this avoids rollbacks...
-       \item ..but no longer allows to access the value directly
+  \begin{frame}[fragile]
+   \frametitle{Idea does not work}
+   \begin{lstlisting}[language=Haskell]
+limitedTransfer acc1 acc2 am = do
+   a1 <- readTVar src
+   if a1 < am
+     then return ()
+     else do a2 <- readTVar  dst
+             writeTVar src (a1 - am)
+             writeTVar dst (a2 + am)
+   \end{lstlisting}
+   \vfill
+    ... the transaction needs the value to determine the branch condition
+\end{frame}
+
+  \begin{frame}[fragile]
+   \frametitle{Problem}
+      \begin{itemize}\setlength\itemsep{1em}
+       \item\lstinline[language=Haskell]{(>>=) :: STM a -> (a -> STM b) -> STM b}
+       \item Bind extracts the value from the STM context
+       \item STM no longer controls this value.
+       \item Need another Typeclass than Monad
       \end{itemize}
+\end{frame}
+
+
+  \begin{frame}[fragile]
+   \frametitle{Applicative}
+      \begin{itemize}\setlength\itemsep{1em}
+       \item Applicative is less powerfull than Monad
+       \item\lstinline[language=Haskell]{(<*>) :: STM (a -> b) -> STM a -> STM b}
+       \item The value can be modified without leaving the STM context
+      \end{itemize}
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%What I have done%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+  
+  \begin{frame}
+   \frametitle{Project}
+   \begin{itemize}\setlength\itemsep{1em}
+    \item Improved a pure Haskell implementation
+    \item Direct notification
+    \item Explicit, ordered locking
+    \item Optimisations
+   \end{itemize}
   \end{frame}
+
+
 
   \begin{frame}
-   \frametitle{Idea}
-   \lstinputlisting{ressources/accountTVar2.hs}   
+   \frametitle{Master Thesis until now}
+   \begin{itemize}\setlength\itemsep{1em}
+    \item Composition by combination of Monad and Applicative
+    \item\lstinline{>>=} evaluates and enables rollbacks
+    \item\lstinline{<*>} enables to modify values without rollbacks
+    \item \lstinline[language=Haskell]{writeTVar :: TVar a -> STM a -> STM ()} 
+   \end{itemize}
+  \end{frame}
+  
+  \begin{frame}
+   \frametitle{New Combinators}
+   \begin{itemize}\setlength\itemsep{1em}
+    \item \lstinline[language=Haskell]{(<*>) :: STM (a -> b) -> STM a -> STM b}
+    \item \lstinline[language=Haskell]{(<**>) :: STM a -> STM (a -> b) -> STM b}
+    \item \lstinline[language=Haskell]{(*>) :: STM a -> STM b -> STM b}
+    \item \lstinline[language=Haskell]{(**>) :: STM a -> (STM a  -> STM b) -> STM b}
+    \item \lstinline[language=Haskell]{(>>=) :: STM a -> (a -> STM b) -> STM b}
+    \item \lstinline[language=Haskell]{(>>) :: STM a -> STM b -> STM b}
+   \end{itemize}
   \end{frame}
 
   
+  \begin{frame}[plain]
+    \frametitle{New Transfer}
+    \lstinputlisting{ressources/accountTVar2.hs}
+  \end{frame}
   
+  
+  
+  
+%%%%%%%%%%%%%%%%%%%%%%
+%%%%%Future Work%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%
+  \begin{frame}
+   \frametitle{Todo}
+   \begin{itemize}\setlength\itemsep{1em}
+    \item Reduce the number of combinators
+    \item ApplicativeDo might do that
+    \item investigate other problems:
+      \begin{itemize}
+        \item Branch condition is not changed by TVar modification
+        \item Recomputation of values which did not change
+      \end{itemize}
+   \end{itemize}
+  \end{frame}
+
+  \begin{frame}[fragile]
+    \frametitle{Unnecessary Recomputation}
+    \begin{lstlisting}[language=Haskell]
+     action = do
+       transfer acc1 acc2 50
+       transfer acc3 acc4 100
+    \end{lstlisting}
+    \vfill
+    If one transfer is invalidated, both are recomputed
+\end{frame}
+
+
   
 \end{document}
 

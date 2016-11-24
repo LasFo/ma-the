@@ -1,0 +1,283 @@
+\documentclass[a4paper,10pt]{article}
+%\documentclass[a4paper,10pt]{scrartcl}
+
+\usepackage[utf8]{inputenc}
+\usepackage{hyperref}
+\usepackage{listings}
+\lstset{language=Haskell}
+\title{}
+\author{}
+\date{}
+
+\pdfinfo{%
+  /Title    ()
+  /Author   ()
+  /Creator  ()
+  /Producer ()
+  /Subject  ()
+  /Keywords ()
+}
+
+\begin{document}
+\maketitle
+\section{27.10.2016}
+First implementation of the new STM design was finished. It allows multiple transactions to commit without aborting each other.
+The transaction only aborts if a constraint is violated.
+\subsection{TVar changes}
+The first part was to extend the TVar by a constraint Field, thus it looks like this now:
+\begin{lstlisting}
+data TVar a = TVar (MVar a)
+                   ID
+                   MVar [MVar ()]
+                   (a -> Bool)
+                   (MVar ())
+\end{lstlisting}
+At this point the constraint is a static funktion, which must be specified at the point the 
+TVar is created. For later implementation this may be modified, so the constraint can be exchanged 
+later on. 
+
+Furthermore was the waitqueue kept even if there is no longer a direct \textit{retry}.
+When a transactions tries to commit its changes, it validates first to make sure no constraint is
+violated after its commit. If a change would violate a constraint the transaction enters its retryMVar
+into the waitqueue of the TVars that it read and suspends until another transaction changes a TVar that was read.
+
+An explicit lock were introduced. If the \textit{MVar a} would be used for locking, its value has to be remembered
+and looked up everytime this TVars values is used. 
+
+\subsection{STM interface}
+\label{stmint}
+STM is no longer a Monad. This means the user is no longer able to use the results of STM actions directly as values.
+For example he cannot use the result of readTVar as a value to evaluate a branch condition or pass it to writeTVar.
+That is the reason the type of writeTVar had to be changed to:
+\begin{lstlisting}
+writeTVar :: TVar a -> STM a -> STM ()
+\end{lstlisting}
+writeTVar now takes a STM action instead of a value. Internallly the result of the STM action is extracted and written 
+into the writeSet. This is necessary for later readTVar operations.
+
+In order to allow the user to change values after they were read, the function \textit{modifyVal} were established:
+\begin{lstlisting}
+ modifyVal :: STM a -> (a -> a) -> STM a
+\end{lstlisting}
+The resulting action behaves like the passed action but its result is modified by the passed function.
+An example use is the following function, which reads a value and modfies it:
+\begin{lstlisting}
+readAndModify :: TVar a -> (a -> a) -> STM a
+readAndModify tv f = res
+  where val = readTVar tv
+        res = modifyVal val f
+\end{lstlisting}
+        
+
+\subsection{Sequence}
+A new type class was introduced to be able to compose multiple STM actions, but prevent the direct use of values.
+\begin{lstlisting}
+class Sequence f where
+  (<%>)  :: f a -> f b -> f b
+  result :: [f a] -> f [a]
+  infixl 1 <%>
+\end{lstlisting}
+The $<\%>$ operator is similar to the Monad operator $>>$; thus the user is able to sequence multiple actions without 
+being able to exctract the value. Later on I may define some laws that this operator must fulfill.
+
+The result funktion has a functionality similar to \textit{sequence}, which is defined on Monads. 
+It takes a list of actions. The actions are combined to a single action whose result a list of the
+results of the inner actions is. This function is needed to be able to read or create multiple TVars in a 
+single transaction.
+
+Both of these functions are used to pass the StmState from one action to the next. 
+
+Later on I may implement a function \textit{lift} to be able to create STM action whose result is a 
+specific value. This is usefull to be able to enter values into TVars whith a call like this:
+\begin{lstlisting}
+ writeTVar t1 (lift 42)
+\end{lstlisting}
+At this point I am not sure if this is needed at all, but it will be considered.
+
+\subsection{Performance}
+To find out if the changes made in the STM implementation are usefull, we performed the first timing tests.
+The test were promising. We used the tests that were made for the implementation that was developed in the 
+project. The here developed version were faster than the base version and the version with direct notification.
+
+\section{todo}
+Further researches are needed to determine if the current implementation can be combined with the monadic version,
+to allow specific transactions to branch dependent on the content of the TVars.
+
+Dynamic constraints: find out if it is possible to let transactions change the constraints on TVars.
+
+No explicit lock: try to use the MVar a which stores the value in the TVar could be used for locking in order 
+to archieve true consistency.
+
+Think of a way to detect which TVars led to a retry and only wake up if one of those is changed.
+
+Implement direct retry. Maybe by extending the STMResult again by a Retry constructor
+
+Laws for Sequence
+
+Find out if \textit{lift} is needed or makes any kind problem. 
+
+Rewrite the other test cases for STMC and test them.
+
+\section{28.10.2016}
+Worked on the todos from 27.10.2016
+\subsection{lift}
+We implememted \textit{lift}. We decided to implement lift, because we implemented an instance for Applicative.
+We had no possibility to combine the values of two TVar. With Applicative we obtained two usefull operations. 
+The first was $<*>$ which now replaced \textit{modifyVal}. Wih modifyValue we were not able to combine the results
+of two different TVars with an arbitrary function. To be able to use arbitrary functions the function \textit{pure} 
+in combination with $<*>$ are used. Take a look at the following example:
+\begin{lstlisting}
+readAndModify :: TVar a -> (a -> a) -> STM a
+readAndModify tv f = pure f <*> readTVar tv
+\end{lstlisting}
+We allready know this function from \ref{stmint} where it was implemented with modifyVal. This version uses the 
+functions provided by Applicative.
+
+\subsection{Constraints}
+We implemented the function \textit{replaceConstraint} with the following type:
+\begin{lstlisting}
+ replaceConstraint :: TVar a -> (a -> Bool) -> STM ()
+\end{lstlisting}
+This function allows the user to change the existing constraint on a TVar. In order to allow TVar values which do not
+violate their own constraint the commit phase was split in two parts.
+In the first part the new constraints are checked. In the second part the existing constraint that were not changed are
+checked (if they were written). If any constraint is violated, the transaction retries. 
+
+\subsection{testcases}
+The other testcases could not be reimplemented in the STMC interface, because they branch dependent on the values of the 
+TVars. New testcases will be produced later. 
+
+\section{01.11.2016}
+We will use the following notations to distinguish the implementations of STM. The first is STMM. STMM is the monadic
+implementation of STM. The monadic version is the one GHC uses and that allows the user to branch on values. 
+The second is STMC. The C stands for the constraints which are used to roll back transactions. The version that is
+developed here. 
+
+We combined the two implementations STMM and STMC. This means we are able to work with STMM and STMC transactions on 
+the same values. The STMM transactions are aborted as usual, when a value that was read is modified or a constraint
+is violated. The STMC transactions aborted when a constraint is violated, but \textbf{not} when a value that was read
+is modified.
+
+The combination was tested briefly. We introduced a new test case in order to test their interactions. 
+In this test a (predefined) number of TVars is created. For each TVar a thread is created. This thread
+increments the TVar with a STMC transactions in a loop. Meanwhile executes the main thread an STMM transaction.
+This transaction reads all TVars sorts their values and writes them back. Afterwards the values are printed.
+This behaviour is also looped. 
+
+The test results were not satisfying, because the STMM transaction hardly ever finshed even for a small 
+number of threads. This transaction needs access to all TVars. If one TVar is modified during the transaction,
+it is aborted. 
+
+The basic concurrent test were adapted to the combinational use. Half of the transactions now use STMM transactions
+half of them STMC transactions. In addition is the waiting of the main thread implemented with STMC.
+
+The test result were satisfying. The result were the expected one which means no lost update or dirty read were performed.
+Furthermore were the STMC and STMM transactions used concurrently.
+
+\section{02.11.2016}
+A new concept named \textit{LazyValue} was introduced, implemented and tested.
+
+The goal of LazyValues is to combine STMM and STMC in one library and to make it possible to use
+both opereations in a single transaction. This was archieved by extending the STM interface by the following
+functions:
+\begin{lstlisting}
+ readTVarLazy  :: TVar a -> STM (LazyValue a)
+ writeTVarLazy :: TVar a -> LazyValue a -> STM ()
+ Instance Applicative LazyValue where
+ evalLazyValue :: LazyValue a -> IO a
+\end{lstlisting}
+\textit{readTVarLazy} is similar to a read in STMC. The value cannot be accessed directly. This means no branching 
+on this value is possible. Due to the instance of Applicative this value can be modified or combined with other
+LazyValues. \textit{writeTVarLazy} allow the user to store LazyValues in TVars. 
+The normal interface of STM is preserved.
+At last the function \textit{evalLazyValue} is needed. This function allows the user to convert LazyValues to
+normal Values. It is needed if the result of a transaction is a LazyValue.
+
+If a LazyValue was written and is then read by \textit{readTVar} (not lazy) the transactions enters its retryMVar
+into the waitqueues of the TVars which contributed something to this value. For example:
+\begin{lstlisting}
+ a1 <- readTVarLazy t1
+ a2 <- readTVarLazy t2
+ writeTVarLazy t3 (pure (+) <*> a1 <*> a2)
+ readTVar t3
+ ... 
+\end{lstlisting}
+If transaction1 executes this code and another transaction modifies \textit{t1} or \textit{t2} before 
+transaction1 finishes transactions1 is rolled back, although it performed a lazy read on \textit{t1} 
+and \textit{t2}. Since transaction1 performed a strict read on \textit{t3}, it is allowed to branch on 
+this value. Additionally depends \textit{t3} on the value of \textit{t1} and \textit{t2}, thus 
+changing these values may change \textit{t3}.
+
+ 
+\section{Alternative}
+We also investigated Alternative and its possibilities for STM. The functions of Alternative are already defined.
+$<|>$ is known as \textit{orElse}. Further more is \textit{empty} defined in the form of \textit{retry}. 
+Since STMC has neither retry nor orElse, no Alternative definition for STMC was made. For the monadic version 
+an Alternative instance where defined. This allows to use the functions \textit{some} and \textit{many}. 
+
+some and many are of similar type ($ Alternative f \Rightarrow f a \rightarrow f [a]$).
+Both functions execute the passed transaction repeatedly until it fails. There is one difference between these functions.
+Some executes the transaction at least once, while many returns the empty list, if the transactions runs into an retry
+in its first execution. If these functions are usefull has yet to be seen.
+ 
+\section{Arrows}
+Another structure which generalizes Monads are Arrows. The core idea of Arrows is to combine programm fragments. 
+The core idea of arrows is, that an computation is something that takes an input and converts it to an output.
+It is a highly functional construct and not meant to be used in concurrent context. That is the reason arrows 
+seem not to be usefull for transactions. 
+Arrows allow no kind of sequencing unrelated actions. An operation like $>>$ or $*>$ ist missing. This makes the Arrow
+class uninteresting for STM. Furthermore is no if-then-else like contruct given which makes this class worse than 
+Applicative with regards to the usability.
+
+\section{Graph}
+We discussed the possibility of using a dependency graph on TVars to avoid unnecessary recomputations.
+To be exact in the case of a roll back we could look up in the dependency graph which TVars are affected by
+the invalidation of (a) specific TVar(s). This graph can be constructed, but to construct it in a way that it
+holds the information, which are needed to do a reevaluation, is costly. 
+
+We implemented the dependency graph based STM library. With this implementation only part of the TVars are reevaluated,
+if the transaction rolls back. The reevaluation is done in the commit phase while the TVars are locked. 
+
+For every STM action within the transaction a node in the graph is added. Another approach would be to add for every
+TVar a node in the graph, but this could lead to unnecessary reevaluations.
+The Nodes consist of three elements. First a MVar () that is needed to be able to invalidate the node. The second is 
+a (Maybe (IO a)). This element hold the IO actions whose result is the value that should be written in the MVar.
+The third element is the ID of the TVar the STM action is working on. The id is need for the reevaluation to 
+map the nodes to their associated TVars.
+
+Since there is no information about the STM actions which led to this graph, the reevaluation can only be done once.
+To make sure it does not interfere with other commits the reevaluation is done, while the TVars are locked. 
+In other words the implementation works like this:
+\begin{lstlisting}
+ transaction
+ lock
+ validate
+   if valid
+     then commit
+          undlock 
+          return res
+     else reevaluate
+          unlock 
+          return res
+\end{lstlisting}
+We noticed that this implmentaion is not usefull at all, because the evaluation is performed in the time the transaction locked the 
+TVars. To be exact, we sequentialized the transactions.
+
+\section{LVars}
+We read the paper about LVars\cite{kuper2013lvars}. These LVars aim to provide deterministic prallelism, but they are restrictive to the use
+of the LVars. The operations used on the LVar values need to be commutative. Furthermore needs the value of the LVar to be monotinic. This 
+is too restrictive for the use in the transactional context.
+
+For example consider Intergers. If we apply the restrictions to this data type, it meand we may only use addition and multiplication, but not
+subtraction. In the case of Booleans we need to define first which means monotonicity. With this restriction we cannot even implement the most 
+basic examples for concurrent programming. The dining philosopher or a simple bank account. 
+
+Furthermore is the main objective of LVar the deterministic parallelism and not the preformance. Since the main objective of this thesis is 
+to optimize the existing implementation of STM performance is the main objective of this thesis, while handling nondeterminism by detection
+and correction.
+
+
+
+\bibliography{lit}
+\bibliographystyle{plain}
+\end{document}
