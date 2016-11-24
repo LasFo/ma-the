@@ -1,0 +1,158 @@
+\documentclass{beamer}
+%\documentclass[trans]{beamer}
+
+\usetheme[%pageofpages=/,% String used between the current page and the total page count.
+%bullet=circle,% Use circles instead of squares for bullets.
+titleline=true,% Show a line below the frame title.
+alternativetitlepage=true,% Use the fancy title page.
+%titlepagelogo=logo-polito,% Logo for the first page.
+]{Torino} 
+
+\usepackage{parcolumns}
+\usepackage{listings} 
+\author{Lasse Folger}
+\title{\huge Software Transaction Roll Back Avoidance}
+\subtitle{Master Proposal Talk ???}
+\date{\today}
+
+\lstset{escapeinside=!!}
+\begin{document}
+  \begin{frame}[t,plain]
+    \titlepage
+  \end{frame}
+  
+  
+  \begin{frame}[plain]
+    \frametitle{Motivation}
+    \lstinputlisting{ressources/accountMVar.hs}
+  \end{frame}
+  
+  \begin{frame}
+    \frametitle{MVar}
+    \fboxsep=0pt
+    \noindent
+    \begin{minipage}[t]{0.48\linewidth}
+      Thread 1:\\
+      \vfill
+      transfer acc1 acc2 50
+    \end{minipage}%
+    \hfill%
+    \begin{minipage}[t]{0.48\linewidth}
+      Thread 2:\\
+      \vfill
+      transfer acc2 acc1 50
+    \end{minipage}
+    \vfill
+    \pause
+    $\Rightarrow$ Deadlock
+  \end{frame}
+  
+  \begin{frame}
+    \frametitle{Use Transactions}
+    \lstinputlisting{ressources/accountTVar.hs}   
+  \end{frame}
+  
+  \begin{frame}
+    \frametitle{TVar}
+    \fboxsep=0pt
+    \noindent
+    \begin{minipage}[t]{0.48\linewidth}
+      Thread 1:\\
+      \vfill
+      atomically \$ 
+      transfer acc1 acc2 
+    \end{minipage}%
+    \hfill%
+    \begin{minipage}[t]{0.48\linewidth}
+      Thread 2:\\
+      \vfill
+      atomically \$ transfer acc2 acc1
+    \end{minipage}
+    \vfill
+    \pause
+    $\Rightarrow$ works fine, because transactions provide ACID properties
+  \end{frame}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%Current Implementatin%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  \begin{frame}
+    \frametitle{Current Implementation (Control.Concurrent.STM)}
+    \begin{itemize}\setlength\itemsep{1em}
+      \item \textit{writeTVar}, \textit{readTVar} and \textit{newTVar} modify TVars
+      \item \textit{retry} and \textit{orElse} alter the control flow
+      \item \textit{atomically} executes a transaction 
+      \item composition via bind operator (or do)
+    \end{itemize}
+  \end{frame}
+
+  \begin{frame}
+   \frametitle{Validation}
+    \begin{itemize}\setlength\itemsep{1em}
+      \item validation is performed before commiting or when the thread is dispatched
+      \item validation: version numbers from TVars are matched with the read version numbers.
+      \begin{itemize}
+	\item validation fails $\Rightarrow$ restart transaction
+	\item validation succeeds $\Rightarrow$ continue transaction
+      \end{itemize}
+      \item For validation locking is needed
+    \end{itemize}
+  \end{frame}
+
+  \begin{frame}
+   \frametitle{Write Set}
+   \begin{itemize}
+    \item local workspace
+    \item writesTVars cannot to be published directly
+    \item allow to read written values to provide compositionality
+    \item in the comit phase these values are published
+   \end{itemize}
+  \end{frame}
+
+%%%%%%%%%%%%%%%%%% 
+%%%%%Problems%%%%%
+%%%%%%%%%%%%%%%%%%
+    \begin{frame}
+    \frametitle{Problems}
+    \fboxsep=0pt
+    \noindent
+    \begin{minipage}[t]{0.48\linewidth}
+      Thread 1: \\
+       a1 $\leftarrow$ readTVar acc1\\
+       a2 $\leftarrow$ readTVar acc2\\
+       writeTVar acc1 (a1 - 50)\\
+       writeTVar acc2 (a2 + 50)\\
+    \end{minipage}%
+    \hfill%
+    \begin{minipage}[t]{0.48\linewidth}
+      Thread 2:\\
+       a1 $\leftarrow$ readTVar acc2\\
+       a2 $\leftarrow$ readTVar acc1\\
+       writeTVar acc2 (a1 - 50)\\
+       writeTVar acc1 (a2 + 50)\\
+    \end{minipage}
+    \vfill
+    \pause
+    $\Rightarrow$ either sequential or one transaction is rolled back
+  \end{frame}
+  
+  \begin{frame}
+   \frametitle{Idea}
+      \begin{itemize}
+       \item delay the evaluation of readTVar to the comit phase 
+       \item this avoids rollbacks...
+       \item ..but no longer allows to access the value directly
+      \end{itemize}
+  \end{frame}
+
+  \begin{frame}
+   \frametitle{Idea}
+   \lstinputlisting{ressources/accountTVar2.hs}   
+  \end{frame}
+
+  
+  
+  
+\end{document}
+
+
+
