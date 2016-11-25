@@ -49,6 +49,35 @@ transfer acc2 acc1 50
        \end{lstlisting}
       \end{figure}
     \end{minipage}
+\end{frame}
+
+  \begin{frame}[fragile]
+    \frametitle{MVar}
+    \fboxsep=0pt
+    \noindent
+    \begin{minipage}[t]{0.48\linewidth}
+      Thread 1:
+            \begin{figure}
+       \begin{lstlisting}[frame=single]
+a1 <- takeMVar acc1 
+a2 <- takeMVar acc2 
+writeMVar acc1 (a1 - 50)
+writeMVar acc2 (a2 + 50)
+       \end{lstlisting}
+      \end{figure}
+\end{minipage}%
+    \hfill%
+    \begin{minipage}[t]{0.48\linewidth}
+      Thread 2:      
+      \begin{figure}
+       \begin{lstlisting}[frame=single]
+a1 <- takeMVar acc2 
+a2 <- takeMVar acc1 
+writeMVar acc2 (a1 - 50)
+writeMVar acc1 (a2 + 50)
+       \end{lstlisting}
+      \end{figure}
+    \end{minipage}
     \vfill
     \pause
     $\Rightarrow$ Deadlock
@@ -213,7 +242,7 @@ writeTVar acc1 (a2 + 50)
   \begin{frame}[fragile]
    \frametitle{Idea does not work}
    \begin{lstlisting}[language=Haskell]
-limitedTransfer acc1 acc2 am = do
+limitedTransfer src dst am = do
    a1 <- readTVar src
    if a1 < am
      then return ()
@@ -222,7 +251,7 @@ limitedTransfer acc1 acc2 am = do
              writeTVar dst (a2 + am)
    \end{lstlisting}
    \vfill
-    ... the transaction needs the value to determine the branch condition
+    ... the transaction may need the value
 \end{frame}
 
   \begin{frame}[fragile]
@@ -270,6 +299,17 @@ limitedTransfer acc1 acc2 am = do
     \item \lstinline[language=Haskell]{writeTVar :: TVar a -> STM a -> STM ()} 
    \end{itemize}
   \end{frame}
+
+%   \begin{frame}[fragile]
+%    \frametitle{\lstinline[language=Haskell]{writeTVar :: TVar a -> STM a -> STM ()}}
+%    \begin{lstlisting}[language=Haskell]
+% example = do
+%    writeTVar t2 (readTVar t1)
+%    a <- readTVar t2
+%    if a ...
+%    \end{lstlisting}
+% \end{frame}
+
   
   \begin{frame}
    \frametitle{New Combinators}
@@ -289,7 +329,33 @@ limitedTransfer acc1 acc2 am = do
     \lstinputlisting{ressources/accountTVar2.hs}
 \end{frame}
   
-  
+ 
+  \begin{frame}[fragile]
+    \frametitle{Problem solved}
+    \fboxsep=0pt
+    \noindent
+    \begin{minipage}[t]{0.48\linewidth}
+      Thread 1:
+      \begin{figure}
+       \begin{lstlisting}[frame=single]
+atomically $ 
+  transfer acc1 acc2 50
+       \end{lstlisting}
+      \end{figure}
+    \end{minipage}%
+    \hfill%
+    \begin{minipage}[t]{0.48\linewidth}
+      Thread 2:
+      \begin{figure}
+       \begin{lstlisting}[frame=single]
+atomically $ 
+  transfer acc2 acc1 50
+       \end{lstlisting}
+      \end{figure}
+    \end{minipage}
+    \vfill
+    $\Rightarrow$ no more rollback
+\end{frame}
   
   
 %%%%%%%%%%%%%%%%%%%%%%
@@ -311,12 +377,24 @@ limitedTransfer acc1 acc2 am = do
   \begin{frame}[fragile]
     \frametitle{Unnecessary Recomputation}
     \begin{lstlisting}[language=Haskell]
-     action = do
-       transfer acc1 acc2 50
-       transfer acc3 acc4 100
+     transaction = do
+       lmitedTransfer acc1 acc2 50
+       limtedTransfer acc3 acc4 100
     \end{lstlisting}
     \vfill
     If one transfer is invalidated, both are recomputed
+\end{frame}
+
+
+\begin{frame}
+ \frametitle{Questions about...}
+ \begin{itemize}\setlength\itemsep{1em}
+  \item ...Control.Concurrent.STM?
+  \item ...rollback avoidance?
+  \item ...unnecessary recomputation?
+  \item ...something else?
+ \end{itemize}
+
 \end{frame}
 
 
