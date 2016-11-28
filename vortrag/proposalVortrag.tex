@@ -23,7 +23,7 @@ alternativetitlepage=true,% Use the fancy title page.
   \end{frame}
   
   
-  \begin{frame}[plain]
+  \begin{frame}
     \frametitle{Motivation}
     \lstinputlisting{ressources/accountMVar.hs}
   \end{frame}
@@ -132,9 +132,9 @@ atomically $
    \frametitle{Modify Operations}
    \begin{itemize}\setlength\itemsep{1em}
     \item \textbf{newTVar}: creates a new, initialized TVar 
-    \item \textbf{readTVar}: add the TVar and its version number to the read set
     \item \textbf{writeTVar}: add the TVar and the value to the write set
-    \item read set and write set serve as local cache 
+    \item \textbf{readTVar}: add the TVar and its version number to the read set
+    \item read set and write set serve as local buffer 
   \end{itemize}
   \end{frame}
   
@@ -154,9 +154,10 @@ atomically $
    \frametitle{\lstinline{atomically :: STM a -> IO a}}
    \begin{enumerate}\setlength\itemsep{1em}
     \item compute the read set and write set
+    \item lock TVars
     \item validate the read set
-    \item if valid commit the write set
-    \item else restart
+    \item if valid then commit the write set
+    \item else roll back
    \end{enumerate}
   \end{frame}
 
@@ -165,7 +166,7 @@ atomically $
     \begin{enumerate}\setlength\itemsep{1em}
 %       \item lock the TVars in the read set
       \item compare version number in read set with actual version number
-      \item if there is a difference return invalid 
+      \item if there is a difference then return invalid 
       \item else return valid
     \end{enumerate}
   \end{frame}
@@ -182,10 +183,10 @@ atomically $
       Thread 1:
     \begin{figure}
      \begin{lstlisting}[frame=single]
-a1 <- readTVar acc2
-a2 <- readTVar acc1
-writeTVar acc2 (a1 - 50)
-writeTVar acc1 (a2 + 50)
+a1 <- readTVar acc1
+a2 <- readTVar acc2
+writeTVar acc1 (a1 - 50)
+writeTVar acc2 (a2 + 50)
      \end{lstlisting}
     \end{figure}
     \end{minipage}%
@@ -288,6 +289,17 @@ limitedTransfer src dst am = do
    \end{itemize}
   \end{frame}
 
+  
+  \begin{frame}
+   \frametitle{Master Thesis until now}
+   \begin{itemize}\setlength\itemsep{1em}
+    \item Implementation based on Applicative 
+    \item Works without rollbacks...
+    \item ...and without branches
+    \item Constraints on TVars to gain some control
+    \item Still no \textit{retry} or \textit{orElse}
+   \end{itemize}
+  \end{frame}
 
 
   \begin{frame}
@@ -316,7 +328,7 @@ limitedTransfer src dst am = do
    \begin{itemize}\setlength\itemsep{1em}
     \item \lstinline[language=Haskell]{(<*>) :: STM (a -> b) -> STM a -> STM b}
     \item \lstinline[language=Haskell]{(<**>) :: STM a -> STM (a -> b) -> STM b}
-    \item \lstinline[language=Haskell]{(*>) :: STM a -> STM b -> STM b}
+%     \item \lstinline[language=Haskell]{(*>) :: STM a -> STM b -> STM b}
     \item \lstinline[language=Haskell]{(**>) :: STM a -> (STM a  -> STM b) -> STM b}
     \item \lstinline[language=Haskell]{(>>=) :: STM a -> (a -> STM b) -> STM b}
     \item \lstinline[language=Haskell]{(>>) :: STM a -> STM b -> STM b}
@@ -365,7 +377,8 @@ atomically $
    \frametitle{Todo}
    \begin{itemize}\setlength\itemsep{1em}
     \item Reduce the number of combinators
-    \item ApplicativeDo might do that
+    \item Change writeTVars type and use ApplicativeDo
+    \item \textbf{But} it extracts the Value from STM context
     \item investigate other problems:
       \begin{itemize}
         \item Branch condition is not changed by TVar modification

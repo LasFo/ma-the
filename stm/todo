@@ -1,2 +1,2 @@
 parrallelisierung durch ivars beim committen oder vorzeitigen entlocken.
-
+iorefs statt MVar fuer die Werte der TVars 

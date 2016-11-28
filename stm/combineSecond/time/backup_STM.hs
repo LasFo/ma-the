@@ -2,7 +2,7 @@ module STM
            (STM(STM), STMResult(Success), TVar(TVar), 
             newTVar, readTVar, writeTVar, 
             atomically, retry, orElse, (<**>),
-            (**>), (<*>), (*>), pure, T.sequenceA) where
+            (**>), (<*>), (*>), pure) where
 
 import Prelude
 import Control.Concurrent
@@ -14,7 +14,6 @@ import Data.List (sortBy,delete,union)
 import Data.Maybe (isNothing)
 import qualified Data.IntMap.Lazy as IntMap
 import Control.Applicative
-import qualified Data.Traversable as T
 
 -----------------------
 -- The STM interface --
@@ -47,13 +46,6 @@ instance Applicative STM where
               InValid -> return InValid
          Retry newState -> return $ Retry newState
          InValid -> return InValid)
-   (STM t1) *> (STM t2) = STM (\state -> do
-      res1 <- t1 state 
-      case res1 of 
-        Success newState _ _ ->
-          t2 newState
-        Retry newState -> return $ Retry newState
-        InValid -> return InValid)
 
 infixl 4 **>
 
@@ -75,36 +67,27 @@ instance Monad STM where
                                       InValid -> return InValid
                             else return InValid)
   return x      = STM (\state -> return (Success state [] (return x)))
-  (STM t1) >> (STM t2) = STM (\state -> do
-     res1 <- t1 state 
-     case res1 of 
-       Success newState _ _ ->
-         t2 newState
-       Retry newState -> return $ Retry newState
-       InValid -> return InValid)
-  fail _ = STM (\state -> return InValid)
-
 
 data StmState = TST {touchedTVars  :: IntMap.IntMap (IO(IO())),
                 --writeSet contains: (value, MVar to be written, waitQ of TVar the value depends on)
-                     writeSet      :: IntMap.IntMap (IO (),IORef (),[MVar [MVar ()]]), 
-                     notifys       :: IO (),
+                     writeSet      :: IntMap.IntMap (IO (),MVar (),[MVar [MVar ()]]), 
+		     notifys       :: IO (),
                      retryMVar     :: MVar ()} 
 
 data STMResult a = Retry StmState
-                 | InValid
-                 | Success StmState [MVar [MVar ()]] (IO a)
+	         | InValid
+		 | Success StmState [MVar [MVar ()]] (IO a)
 
 initialState :: IO StmState
 initialState = do
   rMVar <- newEmptyMVar 
   return (TST {touchedTVars  = IntMap.empty,
-               writeSet      = IntMap.empty,
-               notifys       = return (),
+	       writeSet      = IntMap.empty,
+	       notifys       = return (),
                retryMVar     = rMVar}) 
 
 -- Transactional variables
-data TVar a = TVar (IORef a)   
+data TVar a = TVar (MVar a)   
                    ID               
                    (MVar [MVar ()])  
                    (MVar ())
@@ -112,11 +95,11 @@ data TVar a = TVar (IORef a)
 newTVar   :: a -> STM (TVar a)
 newTVar v = STM (\stmState -> do
                     id <- getGlobalId
-                    newTVarVal <- newIORef v 
+                    newTVarVal <- newMVar v 
                     newWaitQ <- newMVar []
                     newLock <- newMVar ()
                     let tVar = TVar newTVarVal id newWaitQ newLock
-                    return (Success stmState [] (return tVar)))
+		    return (Success stmState [] (return tVar)))
 
 readTVar :: TVar a -> STM a
 readTVar (TVar mv id waitQ lock) = STM (\stmState -> do
@@ -128,7 +111,7 @@ readTVar (TVar mv id waitQ lock) = STM (\stmState -> do
                                                         Just _  -> touchedTVars stmState
                                                         Nothing -> IntMap.insert id (io lock)
                                                                            (touchedTVars stmState)}
-               return (Success newState [waitQ] (readIORef mv)))
+               return (Success newState [waitQ] (readMVar mv)))
 
 --using io actions to collect locks for tvars of different types in one collection
 io :: MVar a -> IO(IO())
@@ -136,7 +119,7 @@ io tv = do tid <- myThreadId
            a <- takeMVar tv
            return (putMVar tv a)
 
---The value needs to be a STM action to be able to extract the waitQs it depends on 
+
 writeTVar :: TVar a -> STM a -> STM ()
 writeTVar (TVar mv id waitQ lock) (STM tr) = STM (\stmState -> do
          res <- tr stmState 
@@ -150,10 +133,7 @@ writeTVar (TVar mv id waitQ lock) (STM tr) = STM (\stmState -> do
                              writeSet = IntMap.insert id 
                                             (unsafeCoerce act,unsafeCoerce mv,wqs)
                                             (writeSet stmState),
-                             notifys = --if IntMap.member id (writeSet stmState)
-                                         --then notifys stmState else --multiple notifys are cheaper
-                                         --than lookup in the map
-                                         notifys stmState >> fNotify waitQ} in
+                             notifys = notifys stmState >> fNotify waitQ} in
                  return (Success newState [] (return ())) 
            Retry newState -> return $ Retry newState
            InValid -> return InValid)
@@ -169,22 +149,22 @@ atomically stmAction = do
       stmResult <- startSTM stmAction state
       case stmResult of
         Retry newState -> do
-          takeMVar (retryMVar state) 
+          takeMVar (retryMVar state)   -- suspend
           rMVar <- newEmptyMVar
           let reState = state{retryMVar = rMVar}
           atomically' stmAction reState
-        InValid -> do
+	InValid -> do
           rMVar <- newEmptyMVar 
           let reState = state{retryMVar = rMVar}
           atomically' stmAction reState
-        Success newState _ res -> do --at this point waitQs are no longer important
+        Success newState _ res -> do --hier sollte man sich ueberlegen, ob die waitQs wichtig sind
           unlocker <- sequence $ IntMap.elems (touchedTVars newState)
-          valid <- tryTakeMVar $ retryMVar newState 
+          valid <- tryTakeMVar $ retryMVar newState --check validity
           if isNothing valid
             then do
               mapM_ write $ IntMap.elems (writeSet newState)
               notifys newState
-              a <- res --evaluation of the result while the tvars are locked
+              a <- res
               sequence_ unlocker
               return a
             else do
@@ -204,7 +184,7 @@ orElse (STM stm1) (STM stm2) =
            stm1Res <- stm1 stmState
            case stm1Res of
              Retry newState -> stm2 stmState{touchedTVars = touchedTVars newState}
-             _              -> return stm1Res)
+  	     _              -> return stm1Res)
 
 -------------------
 -- Miscellaneous --
@@ -221,10 +201,11 @@ filt iden@(id:ids) act@(io:ios) w@(wid:wids)
   | id >  wid = filt iden act wids  
  -}
 
-write :: (IO (),IORef(), [MVar [MVar ()]]) -> IO ()
+write :: (IO (),MVar (), [MVar [MVar ()]]) -> IO ()
 write (act,mv,_) = do 
    v <- act
-   writeIORef mv v
+   takeMVar mv
+   putMVar mv v
 
 startSTM :: STM a -> StmState -> IO (STMResult a)
 startSTM stmAct@(STM stm) state = stm state
