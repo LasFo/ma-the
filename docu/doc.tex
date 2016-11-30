@@ -277,6 +277,47 @@ to optimize the existing implementation of STM performance is the main objective
 and correction.
 
 
+\section{Papers}
+The paper \textit{Applicative} summarizes the motivation and implementation of the typeclass Applicative. The Applicative class is compared to
+Monad and Arrows. It is the Paper the Haskell implementation of Applicative is based on.
+
+In \textit{Composable Memory Transaction} an alternative implementation for \textit{stm} is givin, which is a pure
+Haskell implementation rather than C library, which is linked at compile time. This allows a better development and
+maintaining of the library.
+
+\textit{doublyLinkedLists.pdf} presents a lock free synchronized doubly linked list which is based on CAS. Furthermore
+is  a lock free deque presented.
+
+\textit{guranteeing determinism} describes a concept for parallel programming in Haskell by explicitly declaring
+the evaluation strategies. Therefore the operators \textit{par} and \textit{pseq} were established.
+
+\textit{hybrid} presents an approach to use the efficiency of hardware transaction to improve the performance
+of software transactions which are not as restricitve as hardware transactions.
+
+\textit{i-structures} presents which are used to gain parallelism without losing determinism. To do this 
+the values are saved in i-structures which can be defined at any time and hold an (not yet) computed result.
+If a someone tries to read on this structure the reader is blocked until the computation is finished.
+
+\textit{lockfreeData} introduces the research field of lock free data structures. At first the primitives are 
+presented and afterwards data structures are presented. A lot of references how and with which primitives the data 
+structures are implemented is givin.
+
+\textit{LVars} presents an appraoch to archieve deterministic parallelism by restricting the data structures to
+lattice based monotonically growing data structures. This is a theoretically and formal work rather than an 
+pratical work with a concret implementation.
+
+\textit{optimising STM} is a paper which optimizes software transactions by engaging technical implementation issues 
+such as the shadow copies and lookups in the write set.
+
+\textit{stmDatastructures} is a paper written by the \textit{stm}-Authors. In this paper they compare the
+performance of synchronized data structures based on locks and synchronized data structures based on transactions.
+Transactions performed better.
+
+\textit{unread} introduces the function \textit{unread} which removes a TVar from readset in order to allow to 
+use TVars for traversable data strutures. This is important for different transactions, which are working on
+different parts of the list, to prevent them from invalidating each other.
+
+
 
 \bibliography{lit}
 \bibliographystyle{plain}

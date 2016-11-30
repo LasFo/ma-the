@@ -113,7 +113,7 @@ atomically $
     \end{minipage}
     \vfill
     \pause
-    $\Rightarrow$ works fine, because transactions provide ACID properties
+    $\Rightarrow$ works fine, because transactions provide ACI(D) properties
 \end{frame}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%Current Implementatin%%%
@@ -166,8 +166,8 @@ atomically $
     \begin{enumerate}\setlength\itemsep{1em}
 %       \item lock the TVars in the read set
       \item compare version number in read set with actual version number
-      \item if there is a difference then return invalid 
-      \item else return valid
+      \item if there is no difference then return valid 
+      \item else return invalid
     \end{enumerate}
   \end{frame}
 
