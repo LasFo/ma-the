@@ -307,7 +307,8 @@ lattice based monotonically growing data structures. This is a theoretically and
 pratical work with a concret implementation.
 
 \textit{optimising STM} is a paper which optimizes software transactions by engaging technical implementation issues 
-such as the shadow copies and lookups in the write set.
+such as the shadow copies and lookups in the write set. This appraoch is based on a pessimistic implementation and 
+specific ussage assumptions.
 
 \textit{stmDatastructures} is a paper written by the \textit{stm}-Authors. In this paper they compare the
 performance of synchronized data structures based on locks and synchronized data structures based on transactions.
@@ -316,6 +317,10 @@ Transactions performed better.
 \textit{unread} introduces the function \textit{unread} which removes a TVar from readset in order to allow to 
 use TVars for traversable data strutures. This is important for different transactions, which are working on
 different parts of the list, to prevent them from invalidating each other.
+
+\textit{SetTransaction} describes an implementation of transaction based Sets by integrating the stm implementation
+into the set implementation. This is a specialized use case and the authors do noch try to generalize this idea for
+arbitrary data structures.
 
 
 
