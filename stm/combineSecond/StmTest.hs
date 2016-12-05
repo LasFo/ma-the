@@ -47,7 +47,7 @@ waitZero tvar = do
   a <- readTVar tvar 
   if a /= 0  
     then retry
-    else return ()
+    else readTVar t2 **> writeTVar t3
     
 {-
 waitZero tvar = do
