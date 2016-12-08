@@ -322,6 +322,41 @@ different parts of the list, to prevent them from invalidating each other.
 into the set implementation. This is a specialized use case and the authors do noch try to generalize this idea for
 arbitrary data structures.
 
+\textit{ApplicativeDO} describes the Motivation and implementation behind applicativeDO. Sadly this is not appliable
+to my STM Implememtation. Applicative do is too restrictive. Everytime an expression has a dependency to a aforebinded
+variable, bind is used. My implememtation just wants to use bind if there is an branch condition dependency for 
+the binded value.
+
+
+\section{(Fixed) Bugs}
+\subsection{2 Phase Commit}
+\textbf{8.12.2016}. While testing some transformations rules I engaged a bug, my tests have not detected until now.
+Up until now the commit phase iterated once on all TVars. For each TVar the associated action were executed and 
+\textbf{immediately} written. Take a look at the following example to understand were this fails:
+\begin{lstlisting}
+ trans = do
+   readTVar t3 **> writeTVar t1
+   readTVar t2 **> writeTVar t3
+\end{lstlisting}
+You expect that after this transaction the initial value of t2 is in t2 and t3 while the inital value of t3 is in t1.
+This was not the case since first the write for t3 were processed. This means the value of t2 is read and written (on 
+IO level) to t3. Then the write for t1 is processed. This means reading t3. Since t3 was already modified on IO level,
+only the new value is available. The result is that all three TVars contain the same value.
+
+\textbf{FIX}. The fix of this bug was simple. The commit phase was devided into two sub phases. First \textbf{all} actions 
+are evaluated and after that writing on IO level is processed. By this always the initial values are read. 
+This does not mean that examples like:
+\begin{lstlisting}
+ trans = do 
+   writeTVar t1 (pure 42)
+   a <- readTVar t1 
+   if a == 42 
+     then return ()
+     else loop
+\end{lstlisting}
+won't work any longer. This is handled by the write set of the STMState. Since the IO level action for reading a TVar is
+only created if the TVar is not allready in the write set.
+
 
 
 \bibliography{lit}

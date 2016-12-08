@@ -1,0 +1,119 @@
+--This case is too general
+--To decide how to transform this to the optimal solution,
+--we need more information obout 'f'
+main = do 
+  a <- readTVar 
+  f a   
+
+--Transformation 1
+--core idea of transformation
+main = do 
+  a <- readTVar t1
+  writeTVar' t2 a
+    ||
+    ||
+    \/ 
+main = do 
+  readTVar t1 **> wrtieTVar t2
+  
+--Transformation 2
+--extended feature. The control flow is not effected by 'a'
+--so no rollback is needed if 'a' changes
+main = do 
+  a <- readTVar t1
+  let b = f a 
+  writeTVar' t2 b
+    ||
+    ||
+    \/
+main = do
+  let b = f <$> (readTVar t1) 
+  writeTVar t2 b 
+ 
+--Transformation 3
+--Can be deduced from Transformation 2, by using it recursively
+main = do
+  a1 <- readTVar t1
+  a2 <- readTVar t2
+  ...
+  an <- readTVar tn
+  let res = f a1 a2 ... an
+    ||
+    ||
+    \/
+main = do 
+  let c = f <$> (readTVar t1) <*> readTVar t2 <*> ... <*> readTVar tn
+
+  
+--Transformation 4
+--Combination of Transformation 1 and 2
+main = do
+  a <- readTVar t1
+  writeTVar t2 (f a)
+    ||
+    ||
+    \/
+main = do 
+  f <$> (readTVar t1) **> writeTVar t2
+
+--Tranformation 5
+--No tranformation at all, since the value is part of a branch condition.
+main = do
+  a <- readTVar t1
+  if p a 
+    then ...
+    else ...
+      ||
+      ||
+      \/
+main = do 
+  a <- readTVar t1
+  if p a 
+    then ...
+    else ... 
+
+
+--Transformation 6
+--Thanks to the semantics of STM the transactions may be move around,
+--without altering the behaviour of the transaction
+main = do
+  a <- readTVar t1
+  b <- readTVar t2
+  writeTVar t2 a
+  writeTVar t1 b
+
+main = do
+  a <- readTVar t1
+  writeTVar' t2 (f a)
+  let b = g a
+  writeTVar' t3 (h b)
+     ||
+     ||
+     \/
+main = do
+  let a = readTVar t1
+  writeTVar t2 (f <$> a)
+  let b = g <$> a
+  writeTVar t3 (h <$> b)
+
+Es gibt keine Moeglichtkeit Funktionen in Haskell zu vergleichen,
+weswegen ein Abbildung von (a -> STM b) nach (STM a -> STM b)
+nicht moeglich ist. Diese waere noetig um das ganze allgemein zu 
+machen. Selbst der Vergleich im Compiler (ueber pointer) 
+waere wenig sinnig, da die partielle Applikation das wieder 
+kaput macht. Also mit oder ohne Compiler, man kommt nicht an
+eine (wie oben angedeutete) Transformation ohne die Syntax
+zu aendern. Wobei das Syntax aendern die ganze Transformation
+unsinnig machn wuerde.
+
+Rewrite Rules are a promising tool to grant the desired program transformation.
+The rewrite rules are applied before the program is desugared.
+This means we have to apply the rewrite rules to the do-notation.
+This is noch possible, since the left hand side of rewrite rules need to 
+be a top level applyable expression. Hence statements such as 'a <- readTVar t1'
+are not eligable as LHS and could not be tranformed with rewrite rules.
+Nevertheless can the rewrite rules be used to 'formalize' the desired
+transformations.
+
+Thanks to the semantics of STM some rearangements of the code do not 
+change the semantics.

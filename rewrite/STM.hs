@@ -1,6 +1,6 @@
 module STM
            (STM(STM), STMResult(Success), TVar(TVar), 
-            newTVar, readTVar, writeTVar, 
+            newTVar, readTVar, writeTVar, writeTVar',
             atomically, retry, orElse, (<**>),
             (**>), (<*>), (*>), pure, T.sequenceA) where
 
@@ -118,6 +118,9 @@ newTVar v = STM (\stmState -> do
                     let tVar = TVar newTVarVal id newWaitQ newLock
                     return (Success stmState [] (return tVar)))
 
+
+
+{-# INLINABLE [2] readTVar #-}
 readTVar :: TVar a -> STM a
 readTVar (TVar mv id waitQ lock) = STM (\stmState -> do
       case IntMap.lookup id (writeSet stmState) of
@@ -136,6 +139,8 @@ io tv = do tid <- myThreadId
            a <- takeMVar tv
            return (putMVar tv a)
 
+
+{-# INLINABLE [2] writeTVar #-}
 --The value needs to be a STM action to be able to extract the waitQs it depends on 
 writeTVar :: TVar a -> STM a -> STM ()
 writeTVar (TVar mv id waitQ lock) (STM tr) = STM (\stmState -> do
@@ -148,7 +153,7 @@ writeTVar (TVar mv id waitQ lock) (STM tr) = STM (\stmState -> do
                                               Nothing ->  IntMap.insert id (io lock) 
                                                                  (touchedTVars stmState),
                              writeSet = IntMap.insert id 
-                                            (unsafeCoerce act, unsafeCoerce mv,wqs)
+                                            (unsafeCoerce act,unsafeCoerce mv,wqs)
                                             (writeSet stmState),
                              notifys = --if IntMap.member id (writeSet stmState)
                                          --then notifys stmState else --multiple notifys are cheaper
@@ -157,12 +162,18 @@ writeTVar (TVar mv id waitQ lock) (STM tr) = STM (\stmState -> do
                  return (Success newState [] (return ())) 
            Retry newState -> return $ Retry newState
            InValid -> return InValid)
-{-
-rwIO :: IO a -> IORef a -> IO (IO ())
-rwIO act ref = do
-  a <- act
-  return (writeIORef ref a)
--}
+
+
+{-# INLINABLE [2] writeTVar' #-}
+writeTVar' :: TVar a -> a -> STM ()
+writeTVar' tv val = writeTVar tv $ pure val
+
+ 
+{-# Rules "WRITEWRITENOFUN" forall t1 t2.  readTVar t1 >>= writeTVar' t2 =  
+                                                     readTVar t1 **> writeTVar t2 #-}  
+
+{-# Rules "WRITEWRITE" forall f t1 t2.  readTVar t1 >>= (\a -> writeTVar' t2 (f a)) = 
+                                                  fmap f (readTVar t1) **> writeTVar t2 #-}
 -- Running STM computations
 atomically :: STM a -> IO a
 atomically stmAction = do
@@ -179,6 +190,7 @@ atomically stmAction = do
           let reState = state{retryMVar = rMVar}
           atomically' stmAction reState
         InValid -> do
+          print "rollback"
           rMVar <- newEmptyMVar 
           let reState = state{retryMVar = rMVar}
           atomically' stmAction reState
@@ -187,12 +199,13 @@ atomically stmAction = do
           valid <- tryTakeMVar $ retryMVar newState 
           if isNothing valid
             then do
-              write $ IntMap.elems (writeSet newState)
+              mapM_ write $ IntMap.elems (writeSet newState)
               notifys newState
               a <- res --evaluation of the result while the tvars are locked
               sequence_ unlocker
               return a
             else do
+              print "rollback"
               sequence_ unlocker
               rMVar <- newEmptyMVar 
               let newState = state{retryMVar = rMVar}
@@ -226,20 +239,11 @@ filt iden@(id:ids) act@(io:ios) w@(wid:wids)
   | id >  wid = filt iden act wids  
  -}
 
---needs to be seperated in 2 phases.
---otherwise the some values may be overwritten before they are read
---for details look at swapText which fail when read and write is done
---in one traverse.
-write :: [(IO (),IORef(), [MVar [MVar ()]])] -> IO ()
-write ws = do
-    writes <- readWS ws
-    writes
-  where readWS []               = return (return ())
-        readWS ((act,ref,_):xs) = do 
-             a <- act
-             ws <- readWS xs
-             return (writeIORef ref a >> ws)
-             
+write :: (IO (),IORef(), [MVar [MVar ()]]) -> IO ()
+write (act,mv,_) = do 
+   v <- act
+   writeIORef mv v
+
 startSTM :: STM a -> StmState -> IO (STMResult a)
 startSTM stmAct@(STM stm) state = stm state
 
