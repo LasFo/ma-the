@@ -56,10 +56,46 @@ main = do
 main = do 
   f <$> (readTVar t1) **> writeTVar t2
 
---Tranformation 5
---No tranformation at all, since the value is part of a branch condition.
+--Transformation 5
+--Binding a value of a readTVar and afterwards overwriting this value 
+--can not be transformed properly into a pure applicative version
+--You cannot even express this with the pure applicative syntax by
+--hand.
 main = do
   a <- readTVar t1
+  writeTVar t1 x
+  b <- readTVar t2
+  writeTVar t2 a
+
+--This example illustrated the increasing complexety with an increase in 
+--the lines of code. Even more complicated transformations arise if the 
+--binded values are combined with pure values, because if we apply the 
+--transformations, these pure values need to be lifted in the STM context
+--to be able to combine them with the SMT actions.
+main = do
+  a <- readTVar t1
+  writeTVar' t2 (f a)
+  let b = g a 42
+  writeTVar' t3 (h b)
+     ||
+     ||
+     \/
+main = do
+  let a = readTVar t1
+  writeTVar t2 (f <$> a)
+  let b = g <$> a <*> pure 42
+  writeTVar t3 (h <$> b)
+
+
+
+--Cases where no transformation is possbile:
+
+--If-Then-Else
+--No tranformation at all, since the value is part of a branch condition.
+--This is case where the rollback is actually desired, if the value changes.
+main = do
+  a <- readTVar t1
+  ...
   if p a 
     then ...
     else ...
@@ -68,33 +104,27 @@ main = do
       \/
 main = do 
   a <- readTVar t1
+  ...
   if p a 
     then ...
     else ... 
 
+--Read-Overwrite-Use
+--It is not possible to swap two values with only the applicative operations.
+--This may be a syntactical problem rather than a problem in general, but is not 
+--yet verified. 
+main = do
+  a <- readTVar t1 
+  readTVar t2 **> writeTVar t1
+  writeTVar' t2 a
 
---Transformation 6
---Thanks to the semantics of STM the transactions may be move around,
---without altering the behaviour of the transaction
-main = do
-  a <- readTVar t1
-  b <- readTVar t2
-  writeTVar t2 a
-  writeTVar t1 b
+--imlementing an operator of the form: stm1 par stm2 = do {stm1; stm2; (stm1,stm2)}
+main = do 
+  readTVar t1
+  readTVar t2
+  writeTVar t2 t1
+  writeTVar t1 t2
 
-main = do
-  a <- readTVar t1
-  writeTVar' t2 (f a)
-  let b = g a
-  writeTVar' t3 (h b)
-     ||
-     ||
-     \/
-main = do
-  let a = readTVar t1
-  writeTVar t2 (f <$> a)
-  let b = g <$> a
-  writeTVar t3 (h <$> b)
 
 Es gibt keine Moeglichtkeit Funktionen in Haskell zu vergleichen,
 weswegen ein Abbildung von (a -> STM b) nach (STM a -> STM b)

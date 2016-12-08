@@ -1,6 +1,6 @@
 module STM
            (STM(STM), STMResult(Success), TVar(TVar), 
-            newTVar, readTVar, writeTVar, 
+            newTVar, readTVar, writeTVar, par, 
             atomically, retry, orElse, (<**>),
             (**>), (<*>), (*>), pure, T.sequenceA) where
 
@@ -83,6 +83,22 @@ instance Monad STM where
        Retry newState -> return $ Retry newState
        InValid -> return InValid)
   fail _ = STM (\state -> return InValid)
+
+par :: STM a -> STM b -> STM (STM a, STM b)
+par (STM stm1) (STM stm2) = STM (\state -> do
+    res1 <- stm1 state
+    case res1 of
+      Success newState deps1 val1 -> do
+         res2 <- stm2 newState
+         case res2 of
+           Success finState deps2 val2 ->
+               return (Success finState [] (return 
+                                 (STM(\st -> return (Success st deps1 val1)),
+                                  STM(\st -> return (Success st deps2 val2))))) 
+           Retry finState -> return (Retry finState)
+           InValid -> return InValid
+      Retry newState -> return (Retry newState)
+      InValid -> return (InValid))
 
 
 data StmState = TST {touchedTVars  :: IntMap.IntMap (IO(IO())),
