@@ -19,6 +19,6 @@ main2 = do
 
 
 swap t1 t2 = do
-  (r1,r2) <- par (readTVar t1) (readTVar t2)
-  writeTVar t1 r2
-  writeTVar t2 r1
+  v1 <- eval (readTVar t1) 
+  readTVar t2 **> writeTVar t1
+  writeTVar t2 v1

@@ -118,13 +118,28 @@ main = do
   readTVar t2 **> writeTVar t1
   writeTVar' t2 a
 
+--UPDATE: This problem was fixed by adding the function 'eval :: STM a -> STM(STM a)'
+--that executes an action and stalls its result. This allows you to evaluate
+--a readTVar and later on use the result in the form of a STM action.
 --imlementing an operator of the form: stm1 par stm2 = do {stm1; stm2; (stm1,stm2)}
-main = do 
-  readTVar t1
-  readTVar t2
-  writeTVar t2 t1
-  writeTVar t1 t2
+main = do
+  a <- eval $ readTVar t1
+  readTVar t2 **> writeTVar t1
+  writeTVar t2 a
 
+--Functions
+--If the exctracted values are used in functions to create new STM action,
+--we can not transform this without deeper knowledge on the function.
+--The function may use guards on the vlaue which is some kind of branch.
+--Criteria for branch funktions:
+--Patternmatching on that value
+--Guards
+--If then else conditions on that value
+--Case conditions of that value
+--If the value is a monad and used with do-notation
+main = do
+  a <- readTVar t1
+  h a 
 
 Es gibt keine Moeglichtkeit Funktionen in Haskell zu vergleichen,
 weswegen ein Abbildung von (a -> STM b) nach (STM a -> STM b)
