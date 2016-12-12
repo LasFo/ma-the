@@ -1,16 +1,113 @@
-% Chapter 1
 
-\chapter{Introduction} % Main chapter title
+\chapter{Introduction} 
 
-\label{Chapter1} % For referencing the chapter elsewhere, use \ref{Chapter1} 
+\label{Chapter1} 
+
+\section{Software Transactional Memory}
+Software Transactional Memory (STM in the following) is a programming language independend synchronization concept. Today STM is implemented 
+in all common programming languages\footnote{Even though STM is language independend, I will present the STM library in Haskell since this thesis is
+about STM in Haskell}. To understand the benefits of STM, take a look at the following example:
+\begin{lstlisting}
+type Account = MVar Int
+
+transfer :: Account -> Account -> Int -> IO ()
+transfer src dst am = do
+  balSrc <- takeMVar src
+  balDst <- takeMVar dst
+  putMVar src (balSrc - am)
+  putMVar dst (balDst + am)
+\end{lstlisting}
+This is a simple implementation of a bank account and an associated transfer function. This implementation uses an \code{MVar}
+for synchronization. An \code{MVar} is a buffer with a capacity of one. This buffer can either be empty or filled. If the MVar is empty,
+every \code{takeMVar} operation on this MVar blocks until it is filled. If the MVar is filled, \code{takeMVar} empties the 
+\code{MVar} and return the value. \code{putMVar} is the opposite operation. It fills the MVar with a value, if it is empty and 
+suspends if the MVar is already filled.
+
+This means \code{transfer} first empties both \code{Accounts}, then modifies the balances and at last writes back the new balances.
+At first glance this function seems to work fine, but the following example contains a deadlock:
+\par\noindent
+\begin{minipage}[t]{.45\textwidth}
+Thread 1:
+\begin{lstlisting}[frame=lrtb]
+main = do
+  transfer acc1 acc2 50
+\end{lstlisting}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{.45\textwidth}
+Thread 2:
+\begin{lstlisting}[frame=lrtb]
+main = do
+  transfer acc2 ac1 50
+\end{lstlisting}
+\end{minipage}
+
+The problem is the mutual access of the MVars. If both threads take their \code{src} at the same time, they will both wait for \code{dst}
+\footnote{In fact is \code{transfer acc1 acc1 50} enough to evoke a deadlock}. To avoid this deadlock we can rewrite the code:
+\begin{lstlisting}
+transfer src dst am = do
+  srcBal <- takeMVar src
+  putMVar src (srcBal - am)
+  dstBal <- takeMVar dst
+  putMVar dst (dstBal + am)
+\end{lstlisting}
+This indeed solves the problem regarding the deadlock. In return we lose consistency. For a brief moment we see an inconsistent state. Since
+the amount was allready subtracted from one account, but not yet added to another account. This inconsistent state is observable by other 
+threads. This was not possible in the first implementation. 
+
+We can use STM to avoid these problems. STM provides a single element buffer named \code{TVar}. A TVar always holds an value and is never 
+empty. TVars are read and written with the functions \code{readTVar} and \code{writeTVar}, respectively. 
+In contrast to \code{putMVar} and \code{takeMVar} the TVar operations are not \code{IO} actions but STM action. 
+\code{STM} is an instance of Monad, hence multiple STM actions can be combined
+using the comfortable do-notation. The following code represents the example from above implemented with STM rather than MVars:
+\begin{lstlisting}
+type Account = TVar Int
+
+transfer :: Account -> Account -> Int -> STM ()
+transfer src dst am = do
+  srcBal <- readTVar src
+  dstBal <- readTVar dst
+  writeTVar src (srcBal - am)
+  writeTVar dst (dstBal + am)
+\end{lstlisting}
+Note the type of transfer is no longer an \code{IO} action, but an \code{STM} action. Besided this the code locks
+similar to the MVar version.
+
+In order to execute a transaction the function \code{atomically :: STM a -> IO a} is used. 
+Since \code{readTVar} and \code{writeTVar} do not lock the TVar they access, the following exmaple evokes no deadlock:
+\par\noindent
+\begin{minipage}[t]{.45\textwidth}
+Thread 1:
+\begin{lstlisting}[frame=lrtb]
+main = do
+  atomically $
+    transfer acc1 acc2 50
+\end{lstlisting}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{.45\textwidth}
+Thread 2:
+\begin{lstlisting}[frame=lrtb]
+main = do 
+  atomically $ 
+    transfer acc2 ac1 50
+\end{lstlisting}
+\end{minipage}
+
+Furthermore does STM library ensures the \keyword{ACID} properties. The ACID properties were Introduced in \parencite{DBTrans}.
+In the case of Haskell the ACID properties mean the following:
+\begin{itemize}
+ \item \keyword{Atomicity}: the transaction executes all operations or none.
+ \item \keyword{Consistency}: all modifications of a transaction are committed at the same time. No transition state is observable.
+ \item \keyword{Isolation}: no concurrency is observable by a transaction. Each transaction can work as if it is the only transaction.
+ \item \keyword{Durability}: ensures the perseverance of the changes. In the case of software transactions this is not necessary.
+\end{itemize}
+These properties explain the name \code{atomically}. 
+
+Before we turn over to the implementation of STM, we take a look at the rest
+of the STM interface. \code{newTVar :: a -> STM (TVar a)} creates a newTVar. Since a TVar always holds a value, an initial value has to be
+passed to create a TVar. There is no function like \code{newEmptyTVar}. Besides the functions to create and access TVars there are functions
+to alter the control flow. 
 
 
-\section{Welcome and Thank You}
-Welcome to this \LaTeX{} Thesis Template, a beautiful and easy to use template for writing a thesis using the \LaTeX{} typesetting system.
-
-If you are writing a thesis (or will be in the future) and its subject is technical or mathematical (though it doesn't have to be), then creating it in \LaTeX{} is highly recommended as a way to make sure you can just get down to the essential writing without having to worry over formatting or wasting time arguing with your word processor.
-
-\LaTeX{} is easily able to professionally typeset documents that run to hundreds or thousands of pages long. With simple mark-up commands, it automatically sets out the table of contents, margins, page headers and footers and keeps the formatting consistent and beautiful. One of its main strengths is the way it can easily typeset mathematics, even \emph{heavy} mathematics. Even if those equations are the most horribly twisted and most difficult mathematical problems that can only be solved on a super-computer, you can at least count on \LaTeX{} to make them look stunning.
-
-%----------------------------------------------------------------------------------------
 

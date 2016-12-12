@@ -328,6 +328,13 @@ variable, bind is used. My implememtation just wants to use bind if there is an 
 the binded value.
 
 
+\section{Definitions}
+A Collection of the Definitions I will use for the course of this thesis.
+\subsection{Critical Value}
+A Value is considered \textit{critical} for transaction \textit{T}, if its modification results in a rollback of T.
+Up until now this are values which were bind by the transaction at some point. Technically this is only needed if 
+the value influences the control flow. In other words if the evaluation was demanded.
+
 \section{(Fixed) Bugs}
 \subsection{2 Phase Commit}
 \textbf{8.12.2016}. While testing some transformations rules I engaged a bug, my tests have not detected until now.

@@ -60,7 +60,7 @@ main = do
 --Binding a value of a readTVar and afterwards overwriting this value 
 --can not be transformed properly into a pure applicative version
 --You cannot even express this with the pure applicative syntax by
---hand.
+--hand. UPDATE see below for solution.
 main = do
   a <- readTVar t1
   writeTVar t1 x
@@ -119,9 +119,8 @@ main = do
   writeTVar' t2 a
 
 --UPDATE: This problem was fixed by adding the function 'eval :: STM a -> STM(STM a)'
---that executes an action and stalls its result. This allows you to evaluate
---a readTVar and later on use the result in the form of a STM action.
---imlementing an operator of the form: stm1 par stm2 = do {stm1; stm2; (stm1,stm2)}
+--that executes an action and stalls its result. This allows you to stall the result 
+--of a readTVar to use it later on. 
 main = do
   a <- eval $ readTVar t1
   readTVar t2 **> writeTVar t1
@@ -132,15 +131,16 @@ main = do
 --we can not transform this without deeper knowledge on the function.
 --The function may use guards on the vlaue which is some kind of branch.
 --Criteria for branch funktions:
---Patternmatching on that value
---Guards
---If then else conditions on that value
---Case conditions of that value
---If the value is a monad and used with do-notation
+--1. Patternmatching on that value
+--2. Guards
+--3. If then else conditions on that value
+--4. Case conditions of that value
+--5. If the value is a monadic action and executed
 main = do
   a <- readTVar t1
   h a 
 
+{-
 Es gibt keine Moeglichtkeit Funktionen in Haskell zu vergleichen,
 weswegen ein Abbildung von (a -> STM b) nach (STM a -> STM b)
 nicht moeglich ist. Diese waere noetig um das ganze allgemein zu 
@@ -162,3 +162,4 @@ transformations.
 
 Thanks to the semantics of STM some rearangements of the code do not 
 change the semantics.
+-}

@@ -1,0 +1,6 @@
+How about boxing the value in the form Hood does it. This means everytime the evaluation of
+an expression is demanded, the value is transformed into a critical value. To box these 
+values in a matter that they enter a retryMVar by them self as soon as their evaluation
+is demanded, is possible (see Hood). The problem is that unboxing these values is not
+(easily) possible. The boxing can be done with unsafePerformIO, but this wrapper cannot
+be removed, since it does not exist from the view of Haskell.
