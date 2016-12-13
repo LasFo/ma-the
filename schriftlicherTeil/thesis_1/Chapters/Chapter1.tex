@@ -106,8 +106,44 @@ These properties explain the name \code{atomically}.
 
 Before we turn over to the implementation of STM, we take a look at the rest
 of the STM interface. \code{newTVar :: a -> STM (TVar a)} creates a newTVar. Since a TVar always holds a value, an initial value has to be
-passed to create a TVar. There is no function like \code{newEmptyTVar}. Besides the functions to create and access TVars there are functions
-to alter the control flow. 
+passed to create a TVar. There is no function like \code{newEmptyTVar}. 
 
+Besides functions to create and access TVars there are functions to alter the control flow.
+\code{retry :: STM a} is a generic STM action that indicates a failure, thus whenever a transaction engages a retry it restarts. The transaction
+is \textbf{not} restarted immediately. The transaction restarts, if at least one of the TVars it has read is modified. If the transaction would
+restart immediately (and no TVar has changed), the transaction would run into retry again. 
 
+With \code{orElse :: STM a $\rightarrow$ STM a $\rightarrow$ STM a} you are able to express alternatives. orElse executes the first transaction
+and ignores the second transaction, if the first transaction is successful. If the frist transaction fails (retries), the second transaction is 
+executed instead of the first one.
+
+Note that it is not possible to execute IO action withing a transaction, which means that not side effects can occur. Furthermore this means
+restarting a transaction will never lead to the reexecution of irreversible operations. The reason is that the computations of transactions
+are done within the STM Monad. In other words the type system of Haskell forces us to write correct transactions. 
+
+  
+\section{Implementation}
+I will now give an overview on the current implementation of STM in Haskell. Afterwards I will analyize the problems of this implementation.
+
+Eventhough the current implementation uses a low level C-library if will retain an abstract view on the implementation, since the technical 
+details do not matter for the course of this thesis. I will present an abstract view on the implementation to understand how the ACID 
+properties can be achieved.
+
+The execution of a transaction is split in two phases. First the computation phase and second the commit phase. 
+
+\subsection{Computation Phase}
+This is the frist phase of a transaction execution. In this phase the reads and all non-STM calculations are performed. 
+Aforementioned IO action cannot be executed within a transaction, but pure computation may be executed like the following
+example demonstrates:
+\begin{lstlisting}
+transaction = do 
+  val <- readTVar t
+  if f val 
+    then writeTVar t (g val)
+    else retry
+
+f v = some calculations...    
+g v = some other calculations...
+\end{lstlisting}
+Thus even if the calculation of \code{g} can be delayed thanks to laziness, the calculation of f has to be performed within the transaction.
 
