@@ -9,6 +9,7 @@ import System.IO.Unsafe
 import Graph
 import Data.Maybe (isNothing, fromJust)
 import Control.Applicative
+import Control.Monad (ap)
 
 newtype NodeVal = NV (MVar (), (Maybe (IO())), ID) 
 
@@ -25,6 +26,15 @@ instance Applicative STMVal where
    (SV (act1,wq1,nodes1)) <*> (SV (act2,wq2,nodes2)) = SV (act1 <*> act2,wq1++wq2,nodes1++nodes2)
 
 type ID = Int
+
+instance Functor STM where
+  fmap f b = do
+    a <- b
+    return $ f a
+
+instance Applicative STM where
+  pure = return
+  (<*>) = ap
 
 instance Monad STM where
   return a = STM (\state -> return (Success state a))
