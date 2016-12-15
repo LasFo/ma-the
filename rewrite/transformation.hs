@@ -8,6 +8,9 @@ transaction = do            transformation = do
     \/ 
 transaction = do 
   readTVar t1 **> wrtieTVar t2
+--The scope of 'a' is a risk, since it may occur later in the code
+--can be solved with eval
+
   
 --Transformation 2
 --extended feature. The control flow is not effected by 'a'
@@ -20,8 +23,8 @@ transaction = do
     ||
     \/
 transaction = do
-  let b = f <$> (readTVar t1) 
-  writeTVar t2 b 
+  b <- f <$> (readTVar t1) 
+  writeTVar' t2 b 
  
 --Transformation 3
 --Can be deduced from Transformation 2, by using it recursively
@@ -35,7 +38,7 @@ transaction = do
     ||
     \/
 transaction = do 
-  let c = f <$> (readTVar t1) <*> readTVar t2 <*> ... <*> readTVar tn
+  let res = f <$> (readTVar t1) <*> readTVar t2 <*> ... <*> readTVar tn
 
   
 --Transformation 4
@@ -67,7 +70,7 @@ transaction = do
   writeTVar t2 (f <$> a)
   let b = g <$> a <*> pure 42
   writeTVar t3 (h <$> b)
-
+--NOT ENTIRELY CORRECT eval needed
 
 ----------------------------------------------
 --Cases where no transformation is possbile:--
@@ -133,7 +136,7 @@ transaction = do
   a <- readTVar t1
   h a 
 
---Unsolved problem:
+--Unsolved problem: may become a problem in partial reevaluation
 transaction = do 
   a <- readTVar t1
   if p a 

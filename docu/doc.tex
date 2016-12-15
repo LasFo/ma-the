@@ -327,6 +327,9 @@ to my STM Implememtation. Applicative do is too restrictive. Everytime an expres
 variable, bind is used. My implememtation just wants to use bind if there is an branch condition dependency for 
 the binded value.
 
+\textit{CaPRA} stands for Automatic Checkpointing and Partial Rollback (no clue about the letter ordering). It described 
+ar concept of creating checkpoint while a transcation is executing. In a case of a conflict the transaction is not 
+completely rolled back just to a suitable checkpoint.
 
 \section{Definitions}
 A Collection of the Definitions I will use for the course of this thesis.
@@ -334,6 +337,11 @@ A Collection of the Definitions I will use for the course of this thesis.
 A Value is considered \textit{critical} for transaction \textit{T}, if its modification results in a rollback of T.
 Up until now this are values which were bind by the transaction at some point. Technically this is only needed if 
 the value influences the control flow. In other words if the evaluation was demanded.
+\subsection{Chunk}
+A \textit{chunk} is a part of a transaction which is inseparable. Seperators are $>>$ and $*>$, since 
+these operations are resetting the dependencies. Chunks are always executed as an unit and can therefore not be
+separated.
+
 
 \section{(Fixed) Bugs}
 \subsection{2 Phase Commit}
