@@ -1,6 +1,0 @@
-arrows (untauglich da pipe and filter construct maesig. applicative angenehmer)
-alternative (empty = retry, <|> = orElse, some, any)
-dependency graph (kein IO im ws = neu auswertung nicht moeglich
-                  IO im ws = transactionen schlagen nicht mehr fehl)
-
-

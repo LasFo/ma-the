@@ -345,7 +345,7 @@ separated.
 
 \section{(Fixed) Bugs}
 \subsection{2 Phase Commit}
-\textbf{8.12.2016}. While testing some transformations rules I engaged a bug, my tests have not detected until now.
+\textbf{08.12.2016}. While testing some transformations rules I engaged a bug, my tests have not detected until now.
 Up until now the commit phase iterated once on all TVars. For each TVar the associated action were executed and 
 \textbf{immediately} written. Take a look at the following example to understand were this fails:
 \begin{lstlisting}
@@ -375,6 +375,13 @@ only created if the TVar is not allready in the write set.
 \subsection{Exception handling}
 \textbf{09.12.2016}. The implementation cannot handle exceptions.
 
+
+\subsection{Unshared reads}
+\textbf{05.01.2017}. When readTVar is executed, an IO action is created, which is evaluated in the commitphase. If the result of 
+readTVar is distributed to several points in the program, this IO action is evaluated multiple times. To avoid this, we need to be
+able to share the result of IO actions while retaining the control of execution time. We cannot share the result of an IO action
+before it was executed. But we do not want to execute the IO action before we share it. Sharing is done in the calculation phase,
+while execution is done in the commit phase.
 
 
 \bibliography{lit}

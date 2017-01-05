@@ -48,6 +48,6 @@ This means a transactions appears to be processed instantaneous. \textbf{C} for 
 There is a stable implementation for software transactions in Haskell, namely Software Transactional Memory (called STM in the following). STM provides the ACI(D)
 properties by optimistically executing the transaction. If a conflict is detected, the changes are discarded and the transactions is restarted (a so called rollback). 
 This works, but is not optimal with regards to efficiency and performance. There are two problems. First the conflict detection. Sometimes the implementation detects 
-a conflict a evokes a rollback, even though it is not necessary. The second problem is the rollback mechanism. Regardless of the conflict always the whole transaction
-is reexecuted. This includes operations on data that has not changed thus an unnecessary recomputation. These problems are discussed in detail in the following Chapter 
-\ref{Chapter1}. The aim of this thesis is to provide an alternative implementation that avoids these problems while preserving the ACI(D) properties.
+a conflict and evokes a rollback, even though it is not necessary. The second problem is the rollback mechanism. Regardless of the conflict, always the whole transaction
+is reexecuted. This includes operations on data that has not changed, thus an unnecessary recomputation. These problems are discussed in detail in Chapter \ref{Chapter1}. 
+The aim of this thesis is to provide an alternative implementation that avoids these problems while preserving the ACI(D) properties.

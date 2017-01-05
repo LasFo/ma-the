@@ -57,9 +57,9 @@ threads. This was not possible in the first implementation.
 
 We can use STM to avoid these problems. STM provides a single element buffer named \code{TVar}. A TVar always holds an value and is never 
 empty. TVars are read and written with the functions \code{readTVar} and \code{writeTVar}, respectively. 
-In contrast to \code{putMVar} and \code{takeMVar} the TVar operations are not \code{IO} actions but STM action. 
+In contrast to \code{putMVar} and \code{takeMVar}, the TVar operations are not \code{IO} actions but STM action. 
 \code{STM} is an instance of Monad, hence multiple STM actions can be combined
-using the comfortable do-notation. The following code represents the example from above implemented with STM rather than MVars:
+using the comfortable do-notation. The following code represents the example from above implemented with TVars rather than MVars:
 \begin{lstlisting}
 type Account = TVar Int
 
@@ -74,7 +74,7 @@ Note the type of transfer is no longer an \code{IO} action, but an \code{STM} ac
 similar to the MVar version.
 
 In order to execute a transaction the function \code{atomically :: STM a -> IO a} is used. 
-Since \code{readTVar} and \code{writeTVar} do not lock the TVar they access, the following exmaple evokes no deadlock:
+Since \code{readTVar} and \code{writeTVar} do not lock the TVar, the following exmaple evokes no deadlock:
 \par\noindent
 \begin{minipage}[t]{.45\textwidth}
 Thread 1:
@@ -94,26 +94,27 @@ main = do
 \end{lstlisting}
 \end{minipage}
 
-Furthermore does STM library ensures the \keyword{ACID} properties. The ACID properties were Introduced in \parencite{DBTrans}.
-In the case of Haskell the ACID properties mean the following:
+Furthermore ensures STM the \keyword{ACID} properties. The ACID properties were Introduced in \parencite{DBTrans}.
+In the case of software transactions the ACID properties mean the following:
 \begin{itemize}
  \item \keyword{Atomicity}: the transaction executes all operations or none.
  \item \keyword{Consistency}: all modifications of a transaction are committed at the same time. No transition state is observable.
  \item \keyword{Isolation}: no concurrency is observable by a transaction. Each transaction can work as if it is the only transaction.
  \item \keyword{Durability}: ensures the perseverance of the changes. In the case of software transactions this is not necessary.
 \end{itemize}
-These properties explain the name \code{atomically}. 
+These properties explain the name \code{atomically}, because the enclosed code seems to be executed instantaneously wihtout any 
+interactions with other threads.
 
-Before we turn over to the implementation of STM, we take a look at the rest
-of the STM interface. \code{newTVar :: a -> STM (TVar a)} creates a newTVar. Since a TVar always holds a value, an initial value has to be
+Before we turn over to the implementation of STM, we take a deeper look at the interace of the STM.
+\code{newTVar :: a -> STM (TVar a)} creates a newTVar. Since a TVar always holds a value, an initial value has to be
 passed to create a TVar. There is no function like \code{newEmptyTVar}. 
 
-Besides functions to create and access TVars there are functions to alter the control flow.
-\code{retry :: STM a} is a generic STM action that indicates a failure, thus whenever a transaction engages a retry it restarts. The transaction
+Besides functions to create and access TVars, there are functions to alter the control flow.
+\code{retry :: STM a} is a generic STM action that indicates a failure, thus whenever a transaction engages a \code{retry} it restarts. The transaction
 is \textbf{not} restarted immediately. The transaction restarts, if at least one of the TVars it has read is modified. If the transaction would
-restart immediately (and no TVar has changed), the transaction would run into retry again. 
+restart immediately (and no TVar has changed), the transaction would run into the same \code{retry} again. 
 
-With \code{orElse :: STM a $\rightarrow$ STM a $\rightarrow$ STM a} you are able to express alternatives. orElse executes the first transaction
+With \code{orElse :: STM a $\rightarrow$ STM a $\rightarrow$ STM a} you are able to express alternatives. \code{orElse} executes the first transaction
 and ignores the second transaction, if the first transaction is successful. If the frist transaction fails (retries), the second transaction is 
 executed instead of the first one.
 
@@ -125,25 +126,98 @@ are done within the STM Monad. In other words the type system of Haskell forces 
 \section{Implementation}
 I will now give an overview on the current implementation of STM in Haskell. Afterwards I will analyize the problems of this implementation.
 
-Eventhough the current implementation uses a low level C-library if will retain an abstract view on the implementation, since the technical 
+Even though the current implementation uses a low level C-library, I will retain an abstract view on the implementation, since the technical 
 details do not matter for the course of this thesis. I will present an abstract view on the implementation to understand how the ACID 
-properties can be achieved.
+properties are ensured.
 
 The execution of a transaction is split in two phases. First the computation phase and second the commit phase. 
-
+ 
 \subsection{Computation Phase}
-This is the frist phase of a transaction execution. In this phase the reads and all non-STM calculations are performed. 
-Aforementioned IO action cannot be executed within a transaction, but pure computation may be executed like the following
-example demonstrates:
+In this phase the user written operations are evaluated. The \code{writeTVar} operations do not write the original TVars immediately to
+preseve the ACID properties. Instead the so called \keyword{writeSet} is used. The writeSet stores pairs of TVars and values. The 
+writeSet fulfills two purposes. First, if a transactions finishes and is found to be valid it needs to commit its changes to the 
+original TVars. These changes are logged in the writeSet. Second, the writeSet serves as a local cache. If the user writes a TVar, 
+the TVar and the associated value are entered in the writeSet, not in the original TVar. If the user reads this TVar afterwards, he 
+would not be able able to see his own modifcations, since the original TVar is unchanged. To see his own modifications every 
+\code{readTVar} first looks up the value in the writeSet and returns the associated value if present. Only when the TVar is not 
+present in the writeSet, the original TVar is read. The programmer could keep track of the values he has written himself and thus 
+would not need to search these values in the writeSet, but this would hinder the composability, which was an important motivation
+for STM.
+
+Additionally a \keyword{readSet} is created for every transactions. This readSet hold pairs of TVars and version numbers. These
+version numbers are needed in the commit phase, which is explained in the next section.
+
+Take a look at the following example:
+\begin{lstlisting}
+transaction = do
+  a <- readTVar t1
+  b <- readTVar t2
+  writeTVar t1 b
+  writeTVar t2 a
+\end{lstlisting}
+This code would lead to the following read and writeSet:
+\begin{lstlisting}
+ readSet  = {(t1,0),(t2,0)}
+ writeSet = {(t1,b),(t2,a)}
+\end{lstlisting}
+Note that the values in the readSet are arbitrarily choosen. The exact value is not important, it just needs to be updated 
+to a new unique value everytime it is written by a successful transaction. In this case an increment operation 
+is enough to create a new unique value (if we ignore the overflow problem). 
+
+\code{newTVar} creates a new TVar and initializes this TVar. Afterwards this TVar can be used just like allready existing TVars.
+Even if the transaction is rolled back, the new created TVars are not deleted explicitly. This work is done by the garbage
+collector, since the TVars are not further referenced, if the transaction which created them is rolled back. 
+
+\code{retry} aborts the computation and returns a results that indicates a failure. This result may be intercepted by 
+\code{orElse} or is passed to \code{atomically} directly. 
+
+If \code{atomically} receives an result that indicates an failure, it aborts the transactions and restarts the transaction as soon as
+at least one of the TVars in the readSet has changed. These changes can be checked by comparing the version numbers from the readSet 
+with the version numbers from the original TVars.   
+
+\code{orElse} on the other hand reacts differently on the the result that indicates a failure. Remember the type of 
+\code{orElse :: STM a -> STM a -> STM a}. Consider the following example:
 \begin{lstlisting}
 transaction = do 
-  val <- readTVar t
-  if f val 
-    then writeTVar t (g val)
-    else retry
-
-f v = some calculations...    
-g v = some other calculations...
+  trans1
+  trans2 `orElse` trans3
 \end{lstlisting}
-Thus even if the calculation of \code{g} can be delayed thanks to laziness, the calculation of f has to be performed within the transaction.
+This transaction first executes \code{trans1}. Before \code{trans2} is executed the current wirteSet is copied (name it ws1 for now). Afterwards 
+\code{trans2} is executed. If the execution leads to \code{retry}, the writeSet is set to ws1 and \code{trans3} is executed
+\footnote{This means the writes evoked by \code{trans2} until then are discarded.}. The readSet remains unchanged, thus the TVars added
+by \code{trans2} are included. If the execution of \code{trans2} leads not to retry, the result, the readSet, and the writeSet produced by 
+\code{trans2} are the result of \code{transaction}. In that case \code{trans3} is ignored. 
+
+It is crucial that the readSet produced by \code{trans2} is preserved. Otherwise the TVars read by \code{trans2} may be changed and 
+\code{transaction} would not notice this. This would contradict the isolation of the ACID properties. 
+
+In conclusion the interface functions of STM are processed as follows in the computation phase:
+\begin{itemize}
+ \item \code{writeTVar}: Add TVar and value to writeSet
+ \item \code{readTVar}: Lookup the value in writeSet, if not present read the original TVar and add TVar and version number to the readSet.
+ \item \code{newTVar}: Create and initialize a new TVar. 
+ \item \code{retry}: Return a result that indicates a failure.
+ \item \code{orElse}: Backup the writeSet, execute the first transaction, if it fails restore the writeSet and execute the second transaction, else return the results of the first transaction.
+\end{itemize}
+
+\section{Commit Phase}
+
+
+% This is the frist phase of a transaction execution. In this phase the reads and all pure calculations are performed. 
+% Aforementioned IO action cannot be executed within a transaction, but pure computation may be executed like the following
+% example demonstrates:
+% \begin{lstlisting}
+% transaction = do 
+%   val <- readTVar t
+%   if f val 
+%     then writeTVar t (g val)
+%     else retry
+% 
+% f v = some calculations...    
+% g v = some other calculations...
+% \end{lstlisting}
+% Thus even if the calculation of \code{g} can be delayed thanks to laziness, the calculation of f has to be performed within that transaction.
+% The results of \code{f} effects the control flow and thus needs to be evaluated to determine the result of the branch statement. 
+% 
+% Since 
 
