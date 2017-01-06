@@ -66,7 +66,7 @@ transaction = do
 --What are unnecessary recomputation?
 --Some would say computations which result is the same.
 --I would restrict it to computations which inputs are the same.
---Since Haskell in a deterministic language same input always lead to same results.
+--Since Haskell in a referential transparent language same input always lead to same results.
 --So compumtations with same input are a subset of computations with same results.
 --What does this mean with regards to STM?
 --Only readTVars can be invalidated, since they depend heavily on the actual state of
@@ -88,13 +88,13 @@ transaction = do
 --This is the case for branch mechanisms, namely if-then-else, case, 
 --function (whose result are STM actions that are executed). To reexecute a chunk
 --that contains subchunks mean not necessarily to recompute all subchunks. In the case
---of an if-then-else expression we need to compute on subchunk. In the example below 
+--of an if-then-else expression we need to compute one subchunk. In the example below 
 --the chunk1.5 has the subchunks 2, 3, and 4. Chunks can depend either on TVar or on 
 --other chunks. In this case chunk1 depends on TVar t1, chunk2 on TVar t2, chunk3
 --on TVar t4, chunk4 on TVar t4, chunk5 und TVar t5, and chunk6 on chunk5 and chunk2. 
 --Note that no transitive dependencies are resolved here. Thus chunk6 depends not on 
 --TVar t1, even though the value of t2 depends on the if-then-else condition which on
---the other hand depends on the value of t1. They may also depend on nothing like
+--the other hand depends on the value of t1. They may also depend on nothing, like
 --chunk8. Usually those operations do not make much sense and therefore occur rarely.
 --retry depends on the implementation. In the case of direct notification the rexecution
 --is unnecessary, because it just returns the same stuff. In the case of validation, 
@@ -140,8 +140,8 @@ transaction2 = do
                   else retry                    --chunk12
   readTVar t1                                   --chunk13
 
---When transactions commit their changes they invalidate parts of other transaction, by 
---modifying certain tvars. If a TVar is modified, all chunks which depend on this TVar 
+--When transactions commit their changes they invalidate parts of other transactions, by 
+--modifying certain TVars. If a TVar is modified, all chunks which depend on this TVar 
 --need to be reexecuted. Since chunks may depend on other chunks a reexecution of
 --indirectly effected chunks is needed. This must be continued recursively until
 --no more chunks are invalidated. 
@@ -158,7 +158,7 @@ transaction2 = do
 --at any time, so if the execution is requested, the system can check if the result is still 
 --valid and if so use it, otherwise it could evoke the reexecution.
 --Another approach could be to recursively invalidate the chunks, when a TVar is changed.
---Another important issue is the order of reexecution which need to be kept in mind.
+--Another important issue is the order of reexecution which needs to be kept in mind.
 
 problem = do 
   writeTVar t1 "hallo"          --chunk1
@@ -173,7 +173,7 @@ problem = do
 --holds in its writeSet the information that "hello" was written to t1. This means the
 --transaction has no information that chunk1 was executed. Thus if t2 is modified and 
 --with it p a the transaction has to reexecute certain chunks. With the aforemention 
---technique this would meand reexecuting chunk2 (since p a == False) and not chunk4.
+--technique this would mean reexecuting chunk2 (since p a == False) and not chunk4.
 --Before reexecution, the state has to be modified in order to undo the changes by 
 --the invalid chunks. The current implementation is not able to handle this.
 --The reason is that chunks can overwrite each other. For example chunk4 overwrites

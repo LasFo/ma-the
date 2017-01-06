@@ -124,19 +124,20 @@ are done within the STM Monad. In other words the type system of Haskell forces 
 
   
 \section{Implementation}
-I will now give an overview on the current implementation of STM in Haskell. Afterwards I will analyize the problems of this implementation.
+I will now give an overview on the current implementation of STM in Haskell. For a detailed description of the implementation refer to \parencite{STMBase}
+Afterwards I will analyize the problems of this implementation.
 
 Even though the current implementation uses a low level C-library, I will retain an abstract view on the implementation, since the technical 
-details do not matter for the course of this thesis. I will present an abstract view on the implementation to understand how the ACID 
+details are not important for the course of this thesis. I will present an abstract view on the implementation to understand how the ACID 
 properties are ensured.
 
-The execution of a transaction is split in two phases. First the computation phase and second the commit phase. 
+The execution of a transaction (a call of \code{atomically}) is split in two phases. First the computation phase and second the commit phase. 
  
 \subsection{Computation Phase}
 In this phase the user written operations are evaluated. The \code{writeTVar} operations do not write the original TVars immediately to
 preseve the ACID properties. Instead the so called \keyword{writeSet} is used. The writeSet stores pairs of TVars and values. The 
 writeSet fulfills two purposes. First, if a transactions finishes and is found to be valid it needs to commit its changes to the 
-original TVars. These changes are logged in the writeSet. Second, the writeSet serves as a local cache. If the user writes a TVar, 
+actual TVars. These changes are logged in the writeSet. Second, the writeSet serves as a local cache. If the user writes a TVar, 
 the TVar and the associated value are entered in the writeSet, not in the original TVar. If the user reads this TVar afterwards, he 
 would not be able able to see his own modifcations, since the original TVar is unchanged. To see his own modifications every 
 \code{readTVar} first looks up the value in the writeSet and returns the associated value if present. Only when the TVar is not 
@@ -201,6 +202,59 @@ In conclusion the interface functions of STM are processed as follows in the com
 \end{itemize}
 
 \section{Commit Phase}
+After the readSet and writeSet are calculated and no further STM actions need to be processed, the commit phase starts.
+There are two possible results. First the result of the computation phase indicated a failure (i.e. engaged a \code{retry}).
+When this happens the transactions first validates (the next paragraph explains this in detail). If the transaction is invalid, 
+it is rolled back. This means the readSet and writeSet are discarded and the transaction is restarted. If the transaction is
+valid, the TVars in the readSet are observed. As soon as one of these TVars is modified, the transaction is rolled back.
+
+If the computation phase return a result that indicates a success, the transaction also validates.
+Remember the readSet is a collection of pairs matching a TVar to a version number.
+To validate this it is sufficient to compare the version numbers stored in the readSet with the 
+version number in the actual TVars. If all version numbers match it means the transactions has seen an consistent state
+of the system, because no TVar hast changed after it was read by the transaction. Thus the transaction is valid.
+If there is at least one miss match it means a TVar has changed after the transaction read it. Thus the isolation
+is violated and the transction is invalid. At this point all TVars in the readSet are locked to avoid race concurrency problems. 
+
+Depending on the result of the validation the transaction is further processed. If the the transaction is valid, aditionally the
+TVars in the writeSet are locked (the TVars in the read set are not unlocked yet). After that the actual commit is processed. 
+The values stored in the writeSet are written to the acutal TVars. The version numbers of the written TVars are updated as well.
+The last step of the transaction is to unlock the TVars and return the result of the transction to the caller of \code{atomically}.
+
+If the transaction is found to be invalid, the transactions is rolled back after the locks for the TVars has been released.
+
+
+Lets take a look at the following example:
+\begin{lstlisting}
+transaction1 = do 
+  a <- readTVar t1
+  writeTVar t1 (a-1)
+  
+transaction2 = do 
+  a <- readTVar t1
+  writeTVar t1 (a+1)
+\end{lstlisting}
+Assume the transactions are executed parallel and the initial version number of \code{t1} is \code{0} and the initial value of \code{t1} is \code{5}.
+If \code{transaction1} first executes its computation phase, its readSet contains \code{(t1,0)}. 
+If now \code{transaction2} is executed and finishes the computation phase before \code{transaction1} enter the commit phase,
+its readSet contains \code{(t1,0)}. Since the TVars are locked before the validation starts, only on 
+of the two transactions could validate at a time. 
+
+Assume \code{transaction1} validates first and sees that the version number of \code{t1}
+is still \code{0}, hence it is valid. Since \code{transcation1} is valid, it commits its modifcations, which means to publish its writeSet.
+The writeSet contains \code{(t1,4)}.  Consequently \code{4} is written to \code{t1}. Furthermore is the version number of \code{t1} updated
+to \code{1}. In the end \code{t1} is unlocked. 
+
+Since \code{t1} is unlocked \code{transaction2} can validate. Since the version number of \code{t1} now is \code{1}, but the version
+number in \code{transaction2}s readSet is \code{0}. This means the validation fails and the transactions is rolled back. If there were 
+no validation, \code{transaction2} would also commit at this point. Thus the value of \code{t1} is set to \code{6}. This is obviously
+the well known concurrency problem named \keyword{lost update}. 
+
+
+\section{Notes on the Description}
+In the actual implementation the validation is not only peformed at the end of the transaction, but everytime the transaction is 
+dispatched by the scheduler (is that still true????? it was in the original work, but due to the multiprocessor work around it may
+is outdated allready)
 
 
 % This is the frist phase of a transaction execution. In this phase the reads and all pure calculations are performed. 
