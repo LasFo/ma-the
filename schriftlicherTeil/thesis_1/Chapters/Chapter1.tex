@@ -4,6 +4,7 @@
 \label{Chapter1} 
 
 \section{Software Transactional Memory}
+\label{STMInterface}
 Software Transactional Memory (STM in the following) is a programming language independend synchronization concept. Today STM is implemented 
 in all common programming languages\footnote{Even though STM is language independend, I will present the STM library in Haskell since this thesis is
 about STM in Haskell}. To understand the benefits of STM, take a look at the following example:
@@ -38,7 +39,7 @@ main = do
 Thread 2:
 \begin{lstlisting}[frame=lrtb]
 main = do
-  transfer acc2 ac1 50
+  transfer acc2 acc1 50
 \end{lstlisting}
 \end{minipage}
 
@@ -90,7 +91,7 @@ Thread 2:
 \begin{lstlisting}[frame=lrtb]
 main = do 
   atomically $ 
-    transfer acc2 ac1 50
+    transfer acc2 acc1 50
 \end{lstlisting}
 \end{minipage}
 
@@ -201,7 +202,7 @@ In conclusion the interface functions of STM are processed as follows in the com
  \item \code{orElse}: Backup the writeSet, execute the first transaction, if it fails restore the writeSet and execute the second transaction, else return the results of the first transaction.
 \end{itemize}
 
-\section{Commit Phase}
+\subsection{Commit Phase}
 After the readSet and writeSet are calculated and no further STM actions need to be processed, the commit phase starts.
 There are two possible results. First the result of the computation phase indicated a failure (i.e. engaged a \code{retry}).
 When this happens the transactions first validates (the next paragraph explains this in detail). If the transaction is invalid, 
@@ -251,10 +252,131 @@ no validation, \code{transaction2} would also commit at this point. Thus the val
 the well known concurrency problem named \keyword{lost update}. 
 
 
-\section{Notes on the Description}
+\subsection{Notes on the Description}
 In the actual implementation the validation is not only peformed at the end of the transaction, but everytime the transaction is 
 dispatched by the scheduler (is that still true????? it was in the original work, but due to the multiprocessor work around it may
 is outdated allready)
+
+
+\section{Problems}
+I will now explain two problems with this implmentation. These problems can be examined independently.
+
+\subsection{Unnecessary Rollback}
+Remember the STM implementation of \code{transfer} given in \ref{STMInterface} and its example use: 
+\par\noindent
+\begin{minipage}[t]{.45\textwidth}
+Thread 1:
+\begin{lstlisting}[frame=lrtb]
+main = do
+  atomically $
+    transfer acc1 acc2 50
+\end{lstlisting}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{.45\textwidth}
+Thread 2:
+\begin{lstlisting}[frame=lrtb]
+main = do 
+  atomically $ 
+    transfer acc2 acc1 50
+\end{lstlisting}
+\end{minipage}
+The implmentation is correct, but not verry efficient in this case. Take a look at the inlined functions to understand the 
+problem:
+\par\noindent
+\begin{minipage}[t]{.45\textwidth}
+Thread 1:
+\begin{lstlisting}[frame=lrtb]
+main = do
+  a1 <- readTVar acc1
+  a2 <- readTVar acc2
+  writeTVar acc1 (a1 - 50)
+  writeTVar acc2 (a2 + 50)
+\end{lstlisting}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{.45\textwidth}
+Thread 2:
+\begin{lstlisting}[frame=lrtb]
+main = do 
+  a1 <- readTVar acc2
+  a2 <- readTVar acc1
+  writeTVar acc2 (a1 - 50)
+  writeTVar acc1 (a2 + 50)
+\end{lstlisting}
+\end{minipage}
+
+Due to the scheduler the thread can run in a sequential order. This case may occur, but is not desirable. It means 
+there is no performce improvement by executing this on a multiple cores/processors. Thus the efforts to use multiple
+threads are futile in the first place. This is not a problem specific to STM, but to all synchronization mechanisms. 
+If the resulting multi thread program is not scheduled in a way that it is executed parallel, these mechanisms are a
+performance deterioration rather than a performance improvement. Since we cannot access the scheduler, we ignore 
+this case. 
+
+The second case is that these transactions are run in parallel. This should be the better case, because the implementation
+has a chance to improve the performance. Sadly this is not the case. To understand why, we need to take a close look at 
+the execution. Let us assume both threads execute their computation phase parallel. This means both have read the initial 
+values of \code{acc1} and \code{acc2} and added these information to their readSet. Furthermore have both transactions 
+added entries for \code{acc1} and \code{acc2} to their writeSet. Now both transactions try to commit, thus try to lock 
+the TVars. If \code{Thread 1} gets the locks for \code{acc1} and \code{acc2} it validates and commits, since none of 
+the TVars has changed after \code{Thread 1} read it. After that \code{Thread 2} aquires the locks and validates.
+Since \code{Thread 1} changes the version numbers of \code{acc1} and \code{acc2} by committing, the validation fails
+and the transactions of \code{Thread 2} is restarted. 
+In conclusion no performance improvement was achieved. Both threads are still executed 
+on after another and not parallel as intended.
+
+Let us rearrange the operations of \code{transfer} to see how this can be improved. Note that we can rearrange the 
+operations without changing the semantics of the resulting code due to the ACID properties. 
+\begin{lstlisting}
+transfer src dst am = do
+  srcBal <- readTVar src
+  writeTVar src (srcBal - am)
+  dstBal <- readTVar dst
+  writeTVar dst (dstBal - am)
+\end{lstlisting}
+Transfer basically consists of two parts. Decreasing the balance of the source accound and increasing the 
+balance of the destination account. The actual values of \code{src} and \code{dst} are not important for
+these transactions. If we delay the evaluation of readTVar to the commit phase we could avoid the 
+aforementioned \textbf{unnecessary} rollback, because no transaction would read a value, that is overwritten
+by another transaction afterwards. 
+
+\textbf{TODO Beispiel warum das gut ist.}
+
+In %\ref{Chapter2}
+we will see the challenges that arise, if we do this and how to engage these challenges.
+
+
+
+
+\textbf{This part could be the first point of the fix chapter}
+While the idea would work for this example, the idea would not work 
+for the following example:
+\begin{lstlisting}
+limitedTransfer src dst am = do 
+  srcBal <- readTVar src
+  if a1 < am
+    then return ()
+    else do dstBal <- readTVar dst
+            writeTVar src (srcBal - am)
+            writeTVar dst (dstBal + am)
+\end{lstlisting}
+If we use this function the result of \code{readTVar src} is needed in the computation phase and therefore 
+the evaluation cannot be delayed to the commit phase. The value is needed to decide on the condition of the 
+if expression. To be exact the value is needed to determine the control flow. 
+
+This leads to the question whether there is a way to determine if the result of a \code{readTVar} effects the 
+control flow or not. The current implementation is we are not able to do this. The problem is the bind
+operator: \code{>>= :: STM a -> (a -> STM b) -> STM b}\footnote{Remember that the do notation used so far is 
+syntactic sugar for \code{>>=} and \code{>>}}. This operator allows us to extract the result of an STM action 
+(for example a \code{readTVar}) from the STM context. This means the STM library loses any possibility to 
+observe this value. Thus the library it not able to decide if the value is used to alter the control flow.
+
+If the library handles a value that is \textbf{not} used for branch conditions as if it were used for branch conditions, 
+it may loses performance, but preserves the correct the semantics. If the library on the other hand handles a value that is
+used for branch conditions as if it were not, the library would not perform unnecessary rollbacks, but may violate 
+the ACID properties. Thus the only way to ensure the correctness of the implementation is to handle all 
+values as control flow critical values. 
+
 
 
 % This is the frist phase of a transaction execution. In this phase the reads and all pure calculations are performed. 

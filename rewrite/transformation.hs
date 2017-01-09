@@ -25,6 +25,18 @@ transaction = do
 transaction = do
   b <- f <$> (readTVar t1) 
   writeTVar' t2 b 
+
+
+trans = do
+  a <- readTVar t1
+  writeTVar' t2 a
+  writeTVar' t1 42
+  writeTVar' t3 a
+
+  a <- eval $ readTVar t1
+  writeTVar t2 a
+  writeTVar t1 42
+  writeTVar t3 a
  
 --Transformation 3
 --Can be deduced from Transformation 2, by using it recursively

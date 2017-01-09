@@ -194,4 +194,11 @@ problem = do
 --the manipulation of the state is done again, while the interpretation of the STM 
 --operations is cached.
 
-
+-- action1 >> action2
+--Since >> is the seperator of chunks, this operator needs to log the information.
+--The problem is, that this operator has no information about the actual actions 
+--and thus aobut their dependencies which are the most important information
+--writeTVar and readTVar could enter their dependencies in a field like
+--"current chunk". When ever a chunk reaches its end (i.e. reaching >>)
+--this chunk and its dependencies are entered into the STMState.
+--Is it possible for writeTVar and readTVar to determine their dependencies?
