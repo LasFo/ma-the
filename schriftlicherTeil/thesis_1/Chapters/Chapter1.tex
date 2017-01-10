@@ -5,8 +5,8 @@
 
 \section{Software Transactional Memory}
 \label{STMInterface}
-Software Transactional Memory (STM in the following) is a programming language independend synchronization concept. Today STM is implemented 
-in all common programming languages\footnote{Even though STM is language independend, I will present the STM library in Haskell since this thesis is
+Software Transactional Memory (STM in the following) is a programming language independent synchronization concept. Today STM is implemented 
+in all common programming languages\footnote{Even though STM is language independent, I will present the STM library in Haskell since this thesis is
 about STM in Haskell}. To understand the benefits of STM, take a look at the following example:
 \begin{lstlisting}
 type Account = MVar Int
@@ -53,12 +53,13 @@ transfer src dst am = do
   putMVar dst (dstBal + am)
 \end{lstlisting}
 This indeed solves the problem regarding the deadlock. In return we lose consistency. For a brief moment we see an inconsistent state. Since
-the amount was allready subtracted from one account, but not yet added to another account. This inconsistent state is observable by other 
+the amount was allready subtracted from one account, but not yet added to the other account. This inconsistent state is observable by other 
 threads. This was not possible in the first implementation. 
 
 We can use STM to avoid these problems. STM provides a single element buffer named \code{TVar}. A TVar always holds an value and is never 
 empty. TVars are read and written with the functions \code{readTVar} and \code{writeTVar}, respectively. 
-In contrast to \code{putMVar} and \code{takeMVar}, the TVar operations are not \code{IO} actions but STM action. 
+In contrast to \code{putMVar} and \code{takeMVar}, the TVar operations are not \code{IO} actions but \code{STM} action\footnote{For 
+those who are wondering when I use \code{SMT} and when STM. I use \code{STM} when I refer to the Haskell type contstructor and STM when I refer to STM as library}. 
 \code{STM} is an instance of Monad, hence multiple STM actions can be combined
 using the comfortable do-notation. The following code represents the example from above implemented with TVars rather than MVars:
 \begin{lstlisting}
@@ -71,7 +72,7 @@ transfer src dst am = do
   writeTVar src (srcBal - am)
   writeTVar dst (dstBal + am)
 \end{lstlisting}
-Note the type of transfer is no longer an \code{IO} action, but an \code{STM} action. Besided this the code locks
+Note the type of transfer is no longer an \code{IO} action, but an \code{STM} action. Besided this the code looks
 similar to the MVar version.
 
 In order to execute a transaction the function \code{atomically :: STM a -> IO a} is used. 
@@ -103,10 +104,10 @@ In the case of software transactions the ACID properties mean the following:
  \item \keyword{Isolation}: no concurrency is observable by a transaction. Each transaction can work as if it is the only transaction.
  \item \keyword{Durability}: ensures the perseverance of the changes. In the case of software transactions this is not necessary.
 \end{itemize}
-These properties explain the name \code{atomically}, because the enclosed code seems to be executed instantaneously wihtout any 
+These properties explain the name \code{atomically}, because the enclosed code appears to be executed instantaneously wihtout any 
 interactions with other threads.
-
 Before we turn over to the implementation of STM, we take a deeper look at the interace of the STM.
+
 \code{newTVar :: a -> STM (TVar a)} creates a newTVar. Since a TVar always holds a value, an initial value has to be
 passed to create a TVar. There is no function like \code{newEmptyTVar}. 
 
@@ -119,9 +120,9 @@ With \code{orElse :: STM a $\rightarrow$ STM a $\rightarrow$ STM a} you are able
 and ignores the second transaction, if the first transaction is successful. If the frist transaction fails (retries), the second transaction is 
 executed instead of the first one.
 
-Note that it is not possible to execute IO action withing a transaction, which means that not side effects can occur. Furthermore this means
+Note that it is not possible to execute \code{IO} action within a transaction, which means that not side effects can occur. Furthermore this means
 restarting a transaction will never lead to the reexecution of irreversible operations. The reason is that the computations of transactions
-are done within the STM Monad. In other words the type system of Haskell forces us to write correct transactions. 
+are done within the \code{STM} Monad. In other words the type system of Haskell forces us to write correct transactions. 
 
   
 \section{Implementation}
@@ -219,7 +220,7 @@ is violated and the transction is invalid. At this point all TVars in the readSe
 
 Depending on the result of the validation the transaction is further processed. If the the transaction is valid, aditionally the
 TVars in the writeSet are locked (the TVars in the read set are not unlocked yet). After that the actual commit is processed. 
-The values stored in the writeSet are written to the acutal TVars. The version numbers of the written TVars are updated as well.
+The values stored in the writeSet are written to the actual TVars. The version numbers of the written TVars are updated as well.
 The last step of the transaction is to unlock the TVars and return the result of the transction to the caller of \code{atomically}.
 
 If the transaction is found to be invalid, the transactions is rolled back after the locks for the TVars has been released.
@@ -262,12 +263,13 @@ is outdated allready)
 I will now explain two problems with this implmentation. These problems can be examined independently.
 
 \subsection{Unnecessary Rollback}
-Remember the STM implementation of \code{transfer} given in \ref{STMInterface} and its example use: 
+\label{Prob:UnRo}
+Remember the STM implementation of \code{transfer} and its example use given in \ref{STMInterface}: 
 \par\noindent
 \begin{minipage}[t]{.45\textwidth}
 Thread 1:
 \begin{lstlisting}[frame=lrtb]
-main = do
+transaction1 = do
   atomically $
     transfer acc1 acc2 50
 \end{lstlisting}
@@ -276,7 +278,7 @@ main = do
 \begin{minipage}[t]{.45\textwidth}
 Thread 2:
 \begin{lstlisting}[frame=lrtb]
-main = do 
+transcation2 = do 
   atomically $ 
     transfer acc2 acc1 50
 \end{lstlisting}
@@ -287,7 +289,7 @@ problem:
 \begin{minipage}[t]{.45\textwidth}
 Thread 1:
 \begin{lstlisting}[frame=lrtb]
-main = do
+transaction1 = do
   a1 <- readTVar acc1
   a2 <- readTVar acc2
   writeTVar acc1 (a1 - 50)
@@ -298,7 +300,7 @@ main = do
 \begin{minipage}[t]{.45\textwidth}
 Thread 2:
 \begin{lstlisting}[frame=lrtb]
-main = do 
+transaction2 = do 
   a1 <- readTVar acc2
   a2 <- readTVar acc1
   writeTVar acc2 (a1 - 50)
@@ -328,7 +330,7 @@ on after another and not parallel as intended.
 Let us rearrange the operations of \code{transfer} to see how this can be improved. Note that we can rearrange the 
 operations without changing the semantics of the resulting code due to the ACID properties. 
 \begin{lstlisting}
-transfer src dst am = do
+transfer src dst am = do 
   srcBal <- readTVar src
   writeTVar src (srcBal - am)
   dstBal <- readTVar dst
@@ -340,42 +342,96 @@ these transactions. If we delay the evaluation of readTVar to the commit phase w
 aforementioned \textbf{unnecessary} rollback, because no transaction would read a value, that is overwritten
 by another transaction afterwards. 
 
-\textbf{TODO Beispiel warum das gut ist.}
-
-In %\ref{Chapter2}
-we will see the challenges that arise, if we do this and how to engage these challenges.
-
-
-
-
-\textbf{This part could be the first point of the fix chapter}
-While the idea would work for this example, the idea would not work 
-for the following example:
-\begin{lstlisting}
-limitedTransfer src dst am = do 
-  srcBal <- readTVar src
-  if a1 < am
-    then return ()
-    else do dstBal <- readTVar dst
-            writeTVar src (srcBal - am)
-            writeTVar dst (dstBal + am)
+If we refer to our example: 
+\par\noindent
+\begin{minipage}[t]{.45\textwidth}
+Thread 1:
+\begin{lstlisting}[frame=lrtb]
+transaction1 = do
+  a1 <- readTVar acc1
+  a2 <- readTVar acc2
+  writeTVar acc1 (a1 - 50)
+  writeTVar acc2 (a2 + 50)
 \end{lstlisting}
-If we use this function the result of \code{readTVar src} is needed in the computation phase and therefore 
-the evaluation cannot be delayed to the commit phase. The value is needed to decide on the condition of the 
-if expression. To be exact the value is needed to determine the control flow. 
+\end{minipage}
+\hfill
+\begin{minipage}[t]{.45\textwidth}
+Thread 2:
+\begin{lstlisting}[frame=lrtb]
+transaction2 = do 
+  a1 <- readTVar acc2
+  a2 <- readTVar acc1
+  writeTVar acc2 (a1 - 50)
+  writeTVar acc1 (a2 + 50)
+\end{lstlisting}
+\end{minipage}
 
-This leads to the question whether there is a way to determine if the result of a \code{readTVar} effects the 
-control flow or not. The current implementation is we are not able to do this. The problem is the bind
-operator: \code{>>= :: STM a -> (a -> STM b) -> STM b}\footnote{Remember that the do notation used so far is 
-syntactic sugar for \code{>>=} and \code{>>}}. This operator allows us to extract the result of an STM action 
-(for example a \code{readTVar}) from the STM context. This means the STM library loses any possibility to 
-observe this value. Thus the library it not able to decide if the value is used to alter the control flow.
+If change the semantics of \code{readTVar} by delaying the evaluation and nothing else, the following happens.
+Both transactions will execute the computation phase simultaneously. This means for \code{transaction1} adding
+\code{(acc1,(a1 - 50))} and \code{(acc2,(a2 + 50))} to their writeSet (this is analog for \code{transaction2}).
+At the first glance this seems to be incorrect since the value of \code{a1} and \code{a2} are not yet present.
+For Haskell this is pretty common. Haskells evaluation strategy is (NOCHMAL GENAU WERDEN)\textit{lazy}(NOCHMAL GENAU WERDEN). 
+That means passing values that are unevaluated is normal. 
 
-If the library handles a value that is \textbf{not} used for branch conditions as if it were used for branch conditions, 
-it may loses performance, but preserves the correct the semantics. If the library on the other hand handles a value that is
-used for branch conditions as if it were not, the library would not perform unnecessary rollbacks, but may violate 
-the ACID properties. Thus the only way to ensure the correctness of the implementation is to handle all 
-values as control flow critical values. 
+After the computation phase the commit phase follows. The first step is to lock the accessed TVar in order to 
+perform the validation. Since both transactions used the same TVars, they will commit successively instead of
+parallel. Let us assume \code{transaction1} gets the locks first and trys to validate\footnote{You could argue that 
+\code{readTVar} operation is necessary before validating, but this would not change the validity of the 
+transaction, since the TVars are locked and can not be modified by other threads at that point.}. Since the readSet is empty the
+validation unnecessary; it always succeeds. Before \code{transaction1} is able to commit its writeSet it needs
+to evaluate \code{a1} and \code{a2}. By doing this the \code{readTVar} operations are evaluated. Hence the 
+TVar and its version number is added to the readSet and the actual value is return. Since the readSet is allready 
+this step is futile, but for now will be performed.
+
+After \code{transaction1} finished and released the locks, \code{transaction2} aquires these locks
+and validate. The readSet of \code{transaction2} is also empty, thus the validation succeeds. Now \code{transaction2} 
+commits its writeSet and completes by releasing the locks.
+
+Both transactions run parallel as far as possible and did not roll back. In \ref{Chapter2}
+we will see the challenges that arise, if we want to implement this idea and how to engage these challenges.
+
+
+\subsection{Unnecessary Recomputations}
+While the first problem dealed with then question \textit{when} transactions should be rolled back,
+the second problem cover the question \textit{how} transactions should be rolled back. Take a look
+at the following example:
+\begin{lstlisting}
+transaction = do 
+  a <- readTVar t1	
+  writeTVar t1 (f a)	
+  b <- readTVar t2	
+  writeTVar t2 (g b)	
+\end{lstlisting}
+This transaction contains two independent statements. The first two lines of the transacton form the first 
+statement. This is independent of the last two lines. Independent means their side effects or results do not 
+influence each other. While the first line influces the second line, it does not influence the last two lines
+and vice versa. 
+
+If the transaction is now executed it computes its writeSet and readSet first. Then it locks the TVars and 
+validates. The validation fails if either of the TVar has changed after it was read by the transaction.
+If the validation fails the transcation is rolled back. Which means the readSet and writeSet are discarded,
+regardless which TVar was the reason for the failed validation. 
+
+For example if \code{t1} was modified after the transaction read it, the transaction is rolled and both 
+statements are executed agains. This includes the read and write of \code{t2} although the value of 
+\code{t2} did not change. Hence the exact same code with same inputs and the same (relevant) environment is 
+executed twice. If we were able to invalidate parts of transactions instead of transactions as a whole, 
+we can save time when rolling back a transaction.  
+
+Some may argue it is not common to execute independent statements in a single transaction. But I do not want  
+the performance of the STM library to rely on the capabilities of the programmer. 
+Furthermore do I not want to make any asssumption on how the library is most likely be used. 
+I am not sure if there
+are cases in which the execution of independent statements is needed, but I do not want the user to think 
+about this issue. The user should focus on the correctness of the code; the performance is the task of the
+library.  
+
+This concludes the overview on the problems of the current STM implementation. We will now turn over to the 
+solution for this problems.
+
+
+
+
 
 
 

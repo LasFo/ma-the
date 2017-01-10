@@ -1,0 +1,42 @@
+% Chapter 2
+
+\chapter{Concept} % Main chapter title
+
+\label{Chapter2} % For referencing the chapter elsewhere, use \ref{Chapter1} 
+
+%----------------------------------------------------------------------------------------
+I will now explain how I engaged the previously stated problem.
+
+\section{Unnecessary Rollbacks}
+Remember the idea given in \ref{Prob:UnRo}. I suggested to delay the evaluation of 
+readTVar operations to the commit phase rather than doing them directly in the computation
+phase.
+\textbf{This part could be the first point of the fix chapter}
+While the idea would work for this example, the idea would not work 
+for the following example:
+\begin{lstlisting}
+limitedTransfer src dst am = do 
+  srcBal <- readTVar src
+  if a1 < am
+    then return ()
+    else do dstBal <- readTVar dst
+            writeTVar src (srcBal - am)
+            writeTVar dst (dstBal + am)
+\end{lstlisting}
+If we use this function the result of \code{readTVar src} is needed in the computation phase and therefore 
+the evaluation cannot be delayed to the commit phase. The value is needed to decide on the condition of the 
+if expression. To be exact the value is needed to determine the control flow. 
+
+This leads to the question whether there is a way to determine if the result of a \code{readTVar} effects the 
+control flow or not. The current implementation is we are not able to do this. The problem is the bind
+operator: \code{>>= :: STM a -> (a -> STM b) -> STM b}\footnote{Remember that the do notation used so far is 
+syntactic sugar for \code{>>=} and \code{>>}}. This operator allows us to extract the result of an STM action 
+(for example a \code{readTVar}) from the STM context. This means the STM library loses any possibility to 
+observe this value. Thus the library it not able to decide if the value is used to alter the control flow.
+
+If the library handles a value that is \textbf{not} used for branch conditions as if it were used for branch conditions, 
+it may loses performance, but preserves the correct the semantics. If the library on the other hand handles a value that is
+used for branch conditions as if it were not, the library would not perform unnecessary rollbacks, but may violate 
+the ACID properties. Thus the only way to ensure the correctness of the implementation is to handle all 
+values as control flow critical values. 
+

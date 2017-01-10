@@ -78,6 +78,7 @@ instance Monad STM where
   fail _ = STM (\state -> return InValid)
 
 --needed for functions like swap
+--a <- read t >> write t >> use a
 --a <- read >> use a >> use a
 eval :: STM a -> STM (STM a)
 eval (STM stm) = STM (\state -> do
@@ -98,7 +99,7 @@ data StmState = TST {touchedTVars  :: IntMap.IntMap (IO(IO())),
 
 data STMResult a = Retry StmState
                  | InValid
-                 | Success StmState [MVar [MVar ()]] (IO a)
+                 | Success StmState [MVar [MVar ()]] (IO a) -- State Dependencies ValueAction
 
 initialState :: IO StmState
 initialState = do

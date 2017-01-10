@@ -57,7 +57,7 @@ transaction = do
 
 --This shows we need a graph and a collection of elements that point to
 --specific nodes of the graph. The overlaying collection contains one 
---element for each accessed TVar with. This element points to the nodes
+--element for each accessed TVar. This element points to the nodes
 --that depend on this TVars value. Since the order in which the operation
 --appear is important, the graph may no be the best data structure.
 --An ordered data structure may be more appropriated.
@@ -179,6 +179,17 @@ problem = do
 --The reason is that chunks can overwrite each other. For example chunk4 overwrites
 --the changes of chunk1.
 
+--Chunk may also depend on parameters. This is important to maintain one of
+--the most important features of STM, composability. 
+
+fun t1 val =
+  a <- readTVar t1            --chunk1
+  if p a                      --chunk2
+    then writeTVar t1 val     --chunk3
+    else return ()            --chunk4
+
+--In this example chunk3 depends on val. val is an input parameter of fun.
+
 
 ------------------------------------------
 ----------Implementation Idea-------------
@@ -202,3 +213,30 @@ problem = do
 --"current chunk". When ever a chunk reaches its end (i.e. reaching >>)
 --this chunk and its dependencies are entered into the STMState.
 --Is it possible for writeTVar and readTVar to determine their dependencies?
+
+--The problem is similar to the 'unnecessary rollback' problem in terms that the 
+--bind operator is the core of this problem. If we use it to extract an value 
+--from the STM context, we lose track of the dependencies of this value. The
+--library cannot determine the origin of the value, since it is a unboxed 
+--and pure value, thus no context information are available. 
+
+transaction t1 t2 = do
+  a <- readTVar t1
+  if p t1
+    then do wirteTVar t1 (f a)
+            transaction t1 t2
+    else writeTVar t2 (g a)
+
+--A dynamic analysis won't work because of the stated problems with bind. 
+--A staic analysis gets problems with recursion. You cannot generate
+--code that covers (unlimited) recursion. One specific problem is
+--the fact that chunks may depend on input parameters. These may 
+--depend on something the caller binded or something the callee binded 
+--before it evoked a recursive call. If there is more than one way
+--the recursive call can be evoked, it is not clear at compile time, 
+--which of these are acually used at run time, becuase it depends 
+--on the state of the transactional system. Without recursion an easy
+--approach would be to inline all code functions and then use a
+--static analysis.
+
+
