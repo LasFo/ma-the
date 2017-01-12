@@ -126,8 +126,8 @@ are done within the \code{STM} Monad. In other words the type system of Haskell 
 
   
 \section{Implementation}
-I will now give an overview on the current implementation of STM in Haskell. For a detailed description of the implementation refer to \parencite{STMBase}
-Afterwards I will analyize the problems of this implementation.
+I will now give an overview on the current implementation of STM in Haskell. For a detailed description of the implementation and the theory behind it
+refer to \parencite{STMBase}. Afterwards I will analyize the problems with this implementation.
 
 Even though the current implementation uses a low level C-library, I will retain an abstract view on the implementation, since the technical 
 details are not important for the course of this thesis. I will present an abstract view on the implementation to understand how the ACID 
@@ -136,18 +136,20 @@ properties are ensured.
 The execution of a transaction (a call of \code{atomically}) is split in two phases. First the computation phase and second the commit phase. 
  
 \subsection{Computation Phase}
-In this phase the user written operations are evaluated. The \code{writeTVar} operations do not write the original TVars immediately to
-preseve the ACID properties. Instead the so called \keyword{writeSet} is used. The writeSet stores pairs of TVars and values. The 
+In this phase the operations that were written by the user are evaluated. To preseve the ACID properties, the \code{writeTVar} 
+operations do not write the actual TVars immediately. Instead the a data structure called \keyword{writeSet} is used. The 
+writeSet stores pairs of TVar and value. The 
 writeSet fulfills two purposes. First, if a transactions finishes and is found to be valid it needs to commit its changes to the 
-actual TVars. These changes are logged in the writeSet. Second, the writeSet serves as a local cache. If the user writes a TVar, 
-the TVar and the associated value are entered in the writeSet, not in the original TVar. If the user reads this TVar afterwards, he 
-would not be able able to see his own modifcations, since the original TVar is unchanged. To see his own modifications every 
+actual TVars. These changes are logged in the writeSet. Second, the writeSet serves as a local cache. If the user writes an TVar, 
+the TVar and the associated value are entered into the writeSet, not into the actual TVar. If the user reads this TVar afterwards, he 
+would not be able able to see his own modifcations, since the actual TVar is unchanged. To see his own modifications every 
 \code{readTVar} first looks up the value in the writeSet and returns the associated value if present. Only when the TVar is not 
-present in the writeSet, the original TVar is read. The programmer could keep track of the values he has written himself and thus 
-would not need to search these values in the writeSet, but this would hinder the composability, which was an important motivation
+present in the writeSet, the actual TVar is read. The programmer could keep track of the values he has written himself and thus 
+would not need to search these values in the writeSet, but this would hinder the composability, which is an important motivation
 for STM.
 
-Additionally a \keyword{readSet} is created for every transactions. This readSet hold pairs of TVars and version numbers. These
+The TVar not only holds a value, but also a version number, which is updated everytime the TVar is modified.
+Additionally a \keyword{readSet} is created for every transactions. This readSet holds pairs of TVars and version numbers. These
 version numbers are needed in the commit phase, which is explained in the next section.
 
 Take a look at the following example:
@@ -158,25 +160,25 @@ transaction = do
   writeTVar t1 b
   writeTVar t2 a
 \end{lstlisting}
-This code would lead to the following read and writeSet:
+This code would lead to the following readSet and writeSet:
 \begin{lstlisting}
  readSet  = {(t1,0),(t2,0)}
  writeSet = {(t1,b),(t2,a)}
 \end{lstlisting}
-Note that the values in the readSet are arbitrarily choosen. The exact value is not important, it just needs to be updated 
+Note that the version numbers in the readSet are arbitrarily choosen for this example. The exact value is not important, it only needs to be updated 
 to a new unique value everytime it is written by a successful transaction. In this case an increment operation 
 is enough to create a new unique value (if we ignore the overflow problem). 
 
-\code{newTVar} creates a new TVar and initializes this TVar. Afterwards this TVar can be used just like allready existing TVars.
+\code{newTVar} creates a new TVar and initializes this TVar. Afterwards this TVar can be used like allready existing TVars.
 Even if the transaction is rolled back, the new created TVars are not deleted explicitly. This work is done by the garbage
-collector, since the TVars are not further referenced, if the transaction which created them is rolled back. 
+collector, since the TVars are not further referenced, if the transaction that created them is rolled back. 
 
 \code{retry} aborts the computation and returns a results that indicates a failure. This result may be intercepted by 
 \code{orElse} or is passed to \code{atomically} directly. 
 
 If \code{atomically} receives an result that indicates an failure, it aborts the transactions and restarts the transaction as soon as
 at least one of the TVars in the readSet has changed. These changes can be checked by comparing the version numbers from the readSet 
-with the version numbers from the original TVars.   
+with the version numbers from the actual TVars.   
 
 \code{orElse} on the other hand reacts differently on the the result that indicates a failure. Remember the type of 
 \code{orElse :: STM a -> STM a -> STM a}. Consider the following example:
@@ -197,7 +199,7 @@ It is crucial that the readSet produced by \code{trans2} is preserved. Otherwise
 In conclusion the interface functions of STM are processed as follows in the computation phase:
 \begin{itemize}
  \item \code{writeTVar}: Add TVar and value to writeSet
- \item \code{readTVar}: Lookup the value in writeSet, if not present read the original TVar and add TVar and version number to the readSet.
+ \item \code{readTVar}: Lookup the value in writeSet, if not present read the actual TVar and add TVar and version number to the readSet.
  \item \code{newTVar}: Create and initialize a new TVar. 
  \item \code{retry}: Return a result that indicates a failure.
  \item \code{orElse}: Backup the writeSet, execute the first transaction, if it fails restore the writeSet and execute the second transaction, else return the results of the first transaction.
@@ -205,25 +207,31 @@ In conclusion the interface functions of STM are processed as follows in the com
 
 \subsection{Commit Phase}
 After the readSet and writeSet are calculated and no further STM actions need to be processed, the commit phase starts.
-There are two possible results. First the result of the computation phase indicated a failure (i.e. engaged a \code{retry}).
-When this happens the transactions first validates (the next paragraph explains this in detail). If the transaction is invalid, 
+At first the transaction locks all TVars in its readSet in order to avoid concurrency problems at this point.
+If a transcation tries to aquire a lock that is already locked, it releases all its locks restarts the commit phase to
+avoid deadlocks.
+
+Then the transactions validates\footnote{The transaction not only validates in the commit phase, but also every time the executing
+thread yields. This is necessary to detect and roll back transactions, that execute an infinite loop, because they saw inconsistent
+data.}. Remember that the readSet is a collection of pairs consisting of a TVar and a version number.
+It is sufficient to compare the version numbers stored in the readSet with the version numbers in the actual TVars to validate. 
+If all version numbers match, it means the transactions has seen a consistent state
+of the system, because no TVar has changed after it was read by the transaction. Thus the transaction is valid.
+If there is at least one miss match, it means a TVar was changed after the transaction read it. Thus the isolation
+is violated and the transction is invalid.
+
+There are two possible results of the computation phase. First, the result of the computation phase indicates a 
+failure (i.e. engaged a \code{retry}). If the transaction is invalid, 
 it is rolled back. This means the readSet and writeSet are discarded and the transaction is restarted. If the transaction is
 valid, the TVars in the readSet are observed. As soon as one of these TVars is modified, the transaction is rolled back.
 
-If the computation phase return a result that indicates a success, the transaction also validates.
-Remember the readSet is a collection of pairs matching a TVar to a version number.
-To validate this it is sufficient to compare the version numbers stored in the readSet with the 
-version number in the actual TVars. If all version numbers match it means the transactions has seen an consistent state
-of the system, because no TVar hast changed after it was read by the transaction. Thus the transaction is valid.
-If there is at least one miss match it means a TVar has changed after the transaction read it. Thus the isolation
-is violated and the transction is invalid. At this point all TVars in the readSet are locked to avoid race concurrency problems. 
-
+Second, the computation phase returns a result that indicates a success.
 Depending on the result of the validation the transaction is further processed. If the the transaction is valid, aditionally the
-TVars in the writeSet are locked (the TVars in the read set are not unlocked yet). After that the actual commit is processed. 
+TVars in the writeSet are locked (the TVars in the readSet are not unlocked yet). After that the actual commit is processed. 
 The values stored in the writeSet are written to the actual TVars. The version numbers of the written TVars are updated as well.
 The last step of the transaction is to unlock the TVars and return the result of the transction to the caller of \code{atomically}.
 
-If the transaction is found to be invalid, the transactions is rolled back after the locks for the TVars has been released.
+If the transaction is found to be invalid, the transactions is rolled back after the locks of the TVars has been released.
 
 
 Lets take a look at the following example:
@@ -239,35 +247,35 @@ transaction2 = do
 Assume the transactions are executed parallel and the initial version number of \code{t1} is \code{0} and the initial value of \code{t1} is \code{5}.
 If \code{transaction1} first executes its computation phase, its readSet contains \code{(t1,0)}. 
 If now \code{transaction2} is executed and finishes the computation phase before \code{transaction1} enter the commit phase,
-its readSet contains \code{(t1,0)}. Since the TVars are locked before the validation starts, only on 
+its readSet contains \code{(t1,0)}. Since the TVars are locked before the validation starts, only one
 of the two transactions could validate at a time. 
 
 Assume \code{transaction1} validates first and sees that the version number of \code{t1}
-is still \code{0}, hence it is valid. Since \code{transcation1} is valid, it commits its modifcations, which means to publish its writeSet.
+is still \code{0}, hence it is valid. Then \code{transcation1} commits, which is to publish its writeSet.
 The writeSet contains \code{(t1,4)}.  Consequently \code{4} is written to \code{t1}. Furthermore is the version number of \code{t1} updated
-to \code{1}. In the end \code{t1} is unlocked. 
-
-Since \code{t1} is unlocked \code{transaction2} can validate. Since the version number of \code{t1} now is \code{1}, but the version
-number in \code{transaction2}s readSet is \code{0}. This means the validation fails and the transactions is rolled back. If there were 
-no validation, \code{transaction2} would also commit at this point. Thus the value of \code{t1} is set to \code{6}. This is obviously
-the well known concurrency problem named \keyword{lost update}. 
+to \code{1}. In the end \code{t1} is unlocked (and \code{()} is return, because it is the result of \code{writeTVar t1 (a-1)}).
 
 
-\subsection{Notes on the Description}
-In the actual implementation the validation is not only peformed at the end of the transaction, but everytime the transaction is 
-dispatched by the scheduler (is that still true????? it was in the original work, but due to the multiprocessor work around it may
-is outdated allready)
+Since \code{t1} is unlocked \code{transaction2} can validate. Now the version number of \code{t1} is \code{1}, but the version
+number in the readSet of \code{transaction2} is \code{0}. This means the validation fails and the transactions is rolled back. 
+After the reexecution of the computation phase the readSet would contain \code{(t1,1)} and the writeSet \code{(t1,5)}. 
+The validation succeeds and the writeSet is published. The result is the intended one. After executing an atomic increment
+and an atomic decrement, the TVar value is the same as the inital value.
+
+If there were no validation, \code{transaction2} would also commit at this point in the first try. Thus the value of \code{t1} would be set to \code{6}. This would violate 
+the ACID properties. Assuming that the decrement and increment operations are atomic operation, the value of a TVar should not change if it is 
+incremented and decremented once.
 
 
 \section{Problems}
-I will now explain two problems with this implmentation. These problems can be examined independently.
+I will now explain two problems with this implmentation. These problems can be examined independently. The first problem is about
+\textit{when} a transaction is rolled back and the second problem is about \textit{how} a transaction is rolled back.
 
 \subsection{Unnecessary Rollback}
 \label{Prob:UnRo}
 Remember the STM implementation of \code{transfer} and its example use given in \ref{STMInterface}: 
 \par\noindent
 \begin{minipage}[t]{.45\textwidth}
-Thread 1:
 \begin{lstlisting}[frame=lrtb]
 transaction1 = do
   atomically $
@@ -276,7 +284,6 @@ transaction1 = do
 \end{minipage}
 \hfill
 \begin{minipage}[t]{.45\textwidth}
-Thread 2:
 \begin{lstlisting}[frame=lrtb]
 transcation2 = do 
   atomically $ 
@@ -287,7 +294,6 @@ The implmentation is correct, but not verry efficient in this case. Take a look 
 problem:
 \par\noindent
 \begin{minipage}[t]{.45\textwidth}
-Thread 1:
 \begin{lstlisting}[frame=lrtb]
 transaction1 = do
   a1 <- readTVar acc1
@@ -298,7 +304,6 @@ transaction1 = do
 \end{minipage}
 \hfill
 \begin{minipage}[t]{.45\textwidth}
-Thread 2:
 \begin{lstlisting}[frame=lrtb]
 transaction2 = do 
   a1 <- readTVar acc2
@@ -315,20 +320,20 @@ If the resulting multi thread program is not scheduled in a way that it is execu
 performance deterioration rather than a performance improvement. Since we cannot access the scheduler, we ignore 
 this case. 
 
-The second case is that these transactions are run in parallel. This should be the better case, because the implementation
+The second case is that these transactions are run parallel. This should be the better case, because the implementation
 has a chance to improve the performance. Sadly this is not the case. To understand why, we need to take a close look at 
-the execution. Let us assume both threads execute their computation phase parallel. This means both have read the initial 
-values of \code{acc1} and \code{acc2} and added these information to their readSet. Furthermore have both transactions 
-added entries for \code{acc1} and \code{acc2} to their writeSet. Now both transactions try to commit, thus try to lock 
-the TVars. If \code{Thread 1} gets the locks for \code{acc1} and \code{acc2} it validates and commits, since none of 
-the TVars has changed after \code{Thread 1} read it. After that \code{Thread 2} aquires the locks and validates.
-Since \code{Thread 1} changes the version numbers of \code{acc1} and \code{acc2} by committing, the validation fails
-and the transactions of \code{Thread 2} is restarted. 
+the execution. Let us assume both threads execute their computation phase parallel. This means both read the initial 
+values of \code{acc1} and \code{acc2} and add these information to their readSet. Furthermore add both transactions 
+entries for \code{acc1} and \code{acc2} to their writeSet. Then both transactions try to commit, thus try to lock 
+the TVars. If \code{transaction1} gets the locks for \code{acc1} and \code{acc2} it validates and commits, since none of 
+the TVars has changed after \code{transaction1} read them. After that \code{transaction2} aquires the locks and validates.
+Since \code{transaction1} changed the version numbers of \code{acc1} and \code{acc2} by committing, the validation fails
+and \code{transaction2} is restarted. 
 In conclusion no performance improvement was achieved. Both threads are still executed 
 on after another and not parallel as intended.
 
-Let us rearrange the operations of \code{transfer} to see how this can be improved. Note that we can rearrange the 
-operations without changing the semantics of the resulting code due to the ACID properties. 
+if we rearrange the operations of \code{transfer}, we are able to see how this can be improved. Note that we can rearrange the 
+operations to a certain degree without changing the semantics of the resulting code due to the ACID properties. 
 \begin{lstlisting}
 transfer src dst am = do 
   srcBal <- readTVar src
@@ -338,7 +343,7 @@ transfer src dst am = do
 \end{lstlisting}
 Transfer basically consists of two parts. Decreasing the balance of the source accound and increasing the 
 balance of the destination account. The actual values of \code{src} and \code{dst} are not important for
-these transactions. If we delay the evaluation of readTVar to the commit phase we could avoid the 
+these transactions. If we delay the evaluation of readTVar to the commit phase, we avoid the 
 aforementioned \textbf{unnecessary} rollback, because no transaction would read a value, that is overwritten
 by another transaction afterwards. 
 
@@ -366,34 +371,38 @@ transaction2 = do
 \end{lstlisting}
 \end{minipage}
 
-If change the semantics of \code{readTVar} by delaying the evaluation and nothing else, the following happens.
+If we change the semantics of \code{readTVar} by delaying the evaluation, the following happens.
 Both transactions will execute the computation phase simultaneously. This means for \code{transaction1} adding
 \code{(acc1,(a1 - 50))} and \code{(acc2,(a2 + 50))} to their writeSet (this is analog for \code{transaction2}).
 At the first glance this seems to be incorrect since the value of \code{a1} and \code{a2} are not yet present.
-For Haskell this is pretty common. Haskells evaluation strategy is (NOCHMAL GENAU WERDEN)\textit{lazy}(NOCHMAL GENAU WERDEN). 
-That means passing values that are unevaluated is normal. 
+For Haskell this is quite common. Haskells is a non-strict language, which means passing unevaluated expressions
+is normal. 
 
-After the computation phase the commit phase follows. The first step is to lock the accessed TVar in order to 
+After the computation phase the commit phase follows. The first step is to lock the read TVars in order to 
 perform the validation. Since both transactions used the same TVars, they will commit successively instead of
-parallel. Let us assume \code{transaction1} gets the locks first and trys to validate\footnote{You could argue that 
-\code{readTVar} operation is necessary before validating, but this would not change the validity of the 
-transaction, since the TVars are locked and can not be modified by other threads at that point.}. Since the readSet is empty the
-validation unnecessary; it always succeeds. Before \code{transaction1} is able to commit its writeSet it needs
+parallel. 
+
+Assume \code{transaction1} gets the locks first and trys to validate\footnote{You could argue that 
+evaluating \code{readTVar} operation is necessary before validating, but this would not change the validity of the 
+transaction, since the TVars are locked and can not be modified by other transactions at that point.}. 
+Since the readSet is empty the validation is unnecessary; the empty readSet is always valid. 
+Before \code{transaction1} is able to commit its writeSet it needs
 to evaluate \code{a1} and \code{a2}. By doing this the \code{readTVar} operations are evaluated. Hence the 
-TVar and its version number is added to the readSet and the actual value is return. Since the readSet is allready 
-this step is futile, but for now will be performed.
+TVar and its version number is added to the readSet and the actual value is return. Since the readSet is already 
+validated at this point it is superfluous.
 
 After \code{transaction1} finished and released the locks, \code{transaction2} aquires these locks
-and validate. The readSet of \code{transaction2} is also empty, thus the validation succeeds. Now \code{transaction2} 
-commits its writeSet and completes by releasing the locks.
+and validates. The readSet of \code{transaction2} is also empty, thus the validation succeeds. Then \code{transaction2} 
+evaluates the \code{readTVar} operations and commits its writeSet before releasing the locks.
 
-Both transactions run parallel as far as possible and did not roll back. In \ref{Chapter2}
-we will see the challenges that arise, if we want to implement this idea and how to engage these challenges.
+Both transactions run parallel as far as possible and did not roll back. In Chapter \ref{Chapter2}
+are the limitations of this idea presented and the challenges that arise when implementing it.
+Furthermore are solutions to these challenges introduced.
 
 
 \subsection{Unnecessary Recomputations}
 While the first problem dealed with then question \textit{when} transactions should be rolled back,
-the second problem cover the question \textit{how} transactions should be rolled back. Take a look
+the second problem investigates the question \textit{how} transactions are rolled back. Take a look
 at the following example:
 \begin{lstlisting}
 transaction = do 
@@ -412,19 +421,22 @@ validates. The validation fails if either of the TVar has changed after it was r
 If the validation fails the transcation is rolled back. Which means the readSet and writeSet are discarded,
 regardless which TVar was the reason for the failed validation. 
 
-For example if \code{t1} was modified after the transaction read it, the transaction is rolled and both 
-statements are executed agains. This includes the read and write of \code{t2} although the value of 
+For example if \code{t1} was modified after the transaction read it, the transaction is rolled back and both 
+statements are executed again. This includes the read and write of \code{t2} although the value of 
 \code{t2} did not change. Hence the exact same code with same inputs and the same (relevant) environment is 
 executed twice. If we were able to invalidate parts of transactions instead of transactions as a whole, 
 we can save time when rolling back a transaction.  
 
-Some may argue it is not common to execute independent statements in a single transaction. But I do not want  
+Some may argue it is not common to execute independent statements in a single transaction. However, I do not want  
 the performance of the STM library to rely on the capabilities of the programmer. 
 Furthermore do I not want to make any asssumption on how the library is most likely be used. 
 I am not sure if there
 are cases in which the execution of independent statements is needed, but I do not want the user to think 
 about this issue. The user should focus on the correctness of the code; the performance is the task of the
-library.  
+library. 
+
+TODO: this technique may even be used for dependent statements aswell by reexecuting just tails of a dependence
+chain instead of the whole dependent chains
 
 This concludes the overview on the problems of the current STM implementation. We will now turn over to the 
 solution for this problems.
