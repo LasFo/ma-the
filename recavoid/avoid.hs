@@ -67,9 +67,9 @@ transaction = do
 --Some would say computations which result is the same.
 --I would restrict it to computations which inputs are the same.
 --Since Haskell in a referential transparent language same input always lead to same results.
---So compumtations with same input are a subset of computations with same results.
+--So computations with same input are a subset of computations with same results.
 --What does this mean with regards to STM?
---Only readTVars can be invalidated, since they depend heavily on the actual state of
+--Only readTVars can be invalidated, since they heavily depend on the actual state of
 --the TVars. writeTVar on the other hand works independetly from the actual TVar 
 --vlaues. But these operation may depend on readTVar operations, thus they are 
 --transitively depend on the actual TVar values. In the following example R1 

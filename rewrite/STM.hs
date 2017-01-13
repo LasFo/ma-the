@@ -199,9 +199,9 @@ atomically stmAction = do
           valid <- tryTakeMVar $ retryMVar newState 
           if isNothing valid
             then do
-              mapM_ write $ IntMap.elems (writeSet newState)
-              notifys newState
               a <- res --evaluation of the result while the tvars are locked
+              mapM_ write $ IntMap.elems (writeSet newState) --process write in two steps
+              notifys newState
               sequence_ unlocker
               return a
             else do

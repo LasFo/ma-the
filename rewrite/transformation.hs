@@ -134,6 +134,17 @@ transaction = do
   readTVar t2 **> writeTVar t1
   writeTVar t2 a
 
+--Eval
+--The following use of eval leads to two executions of the read on IO level.
+--The problem is that we need the io action to control the time at that the
+--IORef is read. This on the other hand prevents us from sharing the value.
+--We would need sharing on IO actions which is naturally not usefull, since 
+--IO is the part of haskell that is not referential transparent.
+transaction = do
+  a <- eval $ readTVar t1
+  writeTVar t2 a
+  writeTVat t3 a
+
 --Functions:
 --If the exctracted values are used in functions to create new STM action,
 --we can not transform this without deeper knowledge on the function.
