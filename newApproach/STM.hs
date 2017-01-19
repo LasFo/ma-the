@@ -44,7 +44,7 @@ instance Applicative STM where
             res2 <- t2 newState 
             case res2 of
               Success interimState val2 -> do
-                   --make sure the unsafeperform ioactions are processed as intended
+                   --make sure the unsafePerformIO actions are processed as intended
                    --without logging the inter action would lead to blackholes 
                    let finState = interimState{garbage = [unsafeCoerce val1,unsafeCoerce val2] 
                                                          ++ garbage interimState}

@@ -1,0 +1,23 @@
+--In order to gain shareable read results without losing
+--the dependecies, we could use an explicit field in the 
+--StmState. There are several design decisions to make:
+--First the data structure. 
+--  (I)  A list of pairs (deps,val)
+--  (II) An IntMap with (deps,val) entries
+--Second the way of acessing existing values:
+--Generally we can distinguish between explicit and
+--implicit access.
+--Explicit means the user evokes functions to gain
+--values from the StmState field. Even though it does
+--not expose the implementation, it lacks a proper 
+--abstraction. This is easy to implement with a
+--reasonable overhead and works for (I) and (II).
+--This requires to define a clear interface for the
+--user to access the data correctly.
+--Implicit means, the user continues to write readTVar
+--when ever he need the value of that TVar and the
+--STM library grabs the associated value from the 
+--StmState field, if it was allready read. This
+--would mean an overhead due to the lookups(which is
+--usually at least as costly as accessing a specific 
+--value) and is only possible for (II). 

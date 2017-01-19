@@ -331,6 +331,9 @@ the binded value.
 ar concept of creating checkpoint while a transcation is executing. In a case of a conflict the transaction is not 
 completely rolled back just to a suitable checkpoint.
 
+\cite{larus2007transactional} is a book about parallel programming and transactional memory in general, not specific to
+Haskell.
+
 \section{Definitions}
 A Collection of the Definitions I will use for the course of this thesis.
 \subsection{Critical Value}
@@ -384,6 +387,14 @@ before it was executed. But we do not want to execute the IO action before we sh
 while execution is done in the commit phase.
 
 A solution that may would have wokred would be the explicit sharing library, which is no longer supported by the ghc 8.0.
+
+\textbf{19.1.2017}
+The problem was fixed by wrapping the values into \textit{unsafePerformIO} actions. These are either evaluated when the 
+value is bind to some variable or in the commit phase. The values return by \textit{readTVar} are of the following form:
+\begin{lstlisting}
+ unsafePerformIO $ readIORef ref >>= return . (,) deps
+\end{lstlisting}
+\textit{ref} is the IORef of the associated TVar and \textit{deps} is the waitqueue of that TVar.
 
 \bibliography{lit}
 \bibliographystyle{plain}

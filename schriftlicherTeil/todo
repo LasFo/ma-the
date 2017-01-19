@@ -1,0 +1,4 @@
+improve the need for composability to further motivate transactions
+motivate transaction in general
+why is STM cool in Haskell and in other languages not that cool
+validation after dispatch is imortant for true consistency
