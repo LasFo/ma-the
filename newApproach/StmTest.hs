@@ -29,14 +29,15 @@ import Data.List
 threads = 5
 iter    = 100
 tvars   = 20
-changes = 10
+changes = 50
 
 main = do sync <- atomically $ newTVar threads 
           ts <- atomically $ T.sequenceA $ replicate tvars (newTVar 0)
           sequence $ replicate threads (forkIO $ do
                                            performM iter ts 
-                                           atomically $ readTVar sync *>> writeTVar sync . 
-                                                                          fmap (subtract 1))
+                                           atomically $ readTVar sync <**> pure (subtract 1) **> writeTVar sync)
+                                           --atomically $ readTVar sync *>> writeTVar sync . 
+                                             --                             fmap (subtract 1))
           atomically $ waitZero sync
           vs <- atomically $ T.sequenceA $ map readTVar ts
           print $ sum vs
@@ -70,8 +71,8 @@ performM n tvs = do
   positions <- sequence (replicate changes $ randomRIO (0,tvars-1))
   atomically $ do 
       let tvs'   = map (tvs!!) positions
-          fun tv = do readTVar tv *>> writeTVar tv . fmap (+ 1)
-      sequence $ map fun tvs'
+          fun tv = fmap (+1) (readTVar tv) **> writeTVar tv 
+      mapM_ fun tvs'
   performM (n-1) tvs
 
 

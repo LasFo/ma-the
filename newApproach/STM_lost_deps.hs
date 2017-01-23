@@ -1,7 +1,7 @@
 module STM
            (STM(STM), STMResult(Success), TVar(TVar), 
             newTVar, readTVar, writeTVar, eval, atomically,
-            retry, orElse, (<**>), (**>), (<<*), (>*<), 
+            retry, orElse, (<**>), (<<*), (>*<),
             (*>>), (<*>), (*>), pure, T.sequenceA) where
 
 import Prelude
@@ -60,9 +60,6 @@ instance Applicative STM where
           t2 newState
         Retry newState -> return $ Retry newState
         InValid -> return InValid)
-
-infixl 4 **> 
-(**>) = flip ($)
 
 infixl 4 >*<
 (>*<) :: STM a -> STM b -> STM (a,b)
@@ -172,21 +169,15 @@ readTVar (TVar ioRef id waitQ lock) = STM (\stmState -> do
              Just (v,_ioRef) -> do
                return (Success stmState (unsafeCoerce v))
              Nothing -> do
-               let res = buildVal waitQ ioRef
-                   newState = stmState{touchedTVars = case IntMap.lookup id (touchedTVars stmState) of
+               let newState = stmState{touchedTVars = case IntMap.lookup id (touchedTVars stmState) of
                                                         Just _  -> touchedTVars stmState
                                                         Nothing -> IntMap.insert id (io lock)
-                                                                           (touchedTVars stmState),
-                                       --entering the value in the writeSet prevents the transaction
-                                       --to read a TVar multiple times on IO level
-                                       writeSet = IntMap.insert id 
-                                                      (unsafeCoerce res, unsafeCoerce ioRef)
-                                                      (writeSet stmState)}
-               return (Success newState res))
+                                                                           (touchedTVars stmState)}
+               return (Success newState (buildVal waitQ ioRef)))
 
 --If the evaluation is demanded before the commit phase, it may lead to non inteded behaviour
 buildVal :: MVar [MVar ()] -> IORef a -> Val a
-buildVal deps ioRef = unsafePerformIO $ print "IORead" >> readIORef ioRef >>= return . (,) [deps] 
+buildVal deps ioRef = unsafePerformIO $ readIORef ioRef >>= return . (,) [deps] 
 
 --using io actions to collect locks for tvars of different types in one collection
 --used for implicit locks
@@ -196,23 +187,18 @@ io tv = do tid <- myThreadId
            return (putMVar tv a)
 
 --The value needs to be a STM action to be able to extract the waitQs it depends on 
-writeTVar :: TVar a -> STM a -> STM ()
-writeTVar (TVar ioRef id waitQ lock) (STM act)  = STM (\stmState -> do
-            res <- act stmState
-            case res of
-              Success newState val -> do
-                 let finState =
-                      newState{touchedTVars = case IntMap.lookup id (touchedTVars newState) of
-                                                Just _a -> touchedTVars newState
-                                                Nothing ->  IntMap.insert id (io lock) 
-                                                                   (touchedTVars newState),
-                               writeSet = IntMap.insert id 
-                                              (unsafeCoerce val,unsafeCoerce ioRef)
-                                              (writeSet newState),
-                               notifys = notifys newState >> fNotify waitQ} 
-                 return (Success finState (return ()))
-              Retry newState -> return $ Retry newState
-              InValid -> return InValid) 
+writeTVar :: TVar a -> Val a -> STM ()
+writeTVar (TVar ioRef id waitQ lock) val = STM (\stmState -> do
+               let newState =
+                    stmState{touchedTVars = case IntMap.lookup id (touchedTVars stmState) of
+                                              Just _a -> touchedTVars stmState
+                                              Nothing ->  IntMap.insert id (io lock) 
+                                                                 (touchedTVars stmState),
+                             writeSet = IntMap.insert id 
+                                            (unsafeCoerce val,unsafeCoerce ioRef)
+                                            (writeSet stmState),
+                             notifys = notifys stmState >> fNotify waitQ} 
+               return (Success newState (return ()))) 
 {-
 rwIO :: IO a -> IORef a -> IO (IO ())
 rwIO act ref = do
