@@ -193,7 +193,7 @@ atomically stmAction = do
           let reState = state{retryMVar = rMVar}
           atomically' stmAction reState
         InValid -> do
-          print "InValid 1"
+          --print "InValid 1"
           rMVar <- newEmptyMVar 
           let reState = state{retryMVar = rMVar}
           atomically' stmAction reState
@@ -208,7 +208,7 @@ atomically stmAction = do
               sequence_ unlocker
               return a
             else do
-              print "InValid 2"
+            --  print "InValid 2"
               sequence_ unlocker
               rMVar <- newEmptyMVar 
               let newState = state{retryMVar = rMVar}

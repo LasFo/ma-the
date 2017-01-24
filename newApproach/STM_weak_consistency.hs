@@ -1,7 +1,7 @@
 module STM
            (STM(STM), STMResult(Success), TVar(TVar), 
             newTVar, readTVar, writeTVar, eval, atomically,
-            retry, orElse, (<**>), (>*<), (**>),
+            retry, orElse, (<**>), (>*<), 
             (<*>), (*>), pure, T.sequenceA) where
 
 import Prelude
@@ -102,7 +102,7 @@ eval (STM stm) = STM (\state -> do
 
 
 data StmState = TST {touchedTVars  :: IntMap.IntMap (IO(IO())),
-                     writeSet      :: IntMap.IntMap (OneTuple (),MVar (),Deps), 
+                     writeSet      :: IntMap.IntMap (OneTuple (),IORef (),Deps), 
                      notifys       :: IO (),
                      retryMVar     :: MVar (),
                      garbage       :: [OneTuple ()]} 
@@ -121,7 +121,7 @@ initialState = do
                garbage       = []}) 
 
 -- Transactional variables
-data TVar a = TVar (MVar a)   
+data TVar a = TVar (IORef a)   
                    ID               
                    (MVar [MVar ()])  
                    (MVar ())
@@ -129,20 +129,19 @@ data TVar a = TVar (MVar a)
 newTVar   :: a -> STM (TVar a)
 newTVar v = STM (\stmState -> do
                     id <- getGlobalId
-                    newTVarVal <- newMVar v
+                    newTVarVal <- newIORef v
                     newWaitQ <- newMVar []
                     newLock <- newMVar ()
                     let tVar = TVar newTVarVal id newWaitQ newLock
                     return (Success stmState [] (return tVar)))
 
-{-# NOINLINE readTVar #-}
 readTVar :: TVar a -> STM a
-readTVar (TVar mv id waitQ lock) = STM (\stmState -> do
+readTVar (TVar ioRef id waitQ lock) = STM (\stmState -> do
       case IntMap.lookup id (writeSet stmState) of
              Just (v,_ioRef,deps) -> do
                return (Success stmState deps (unsafeCoerce v))
              Nothing -> do
-               let res = buildVal mv
+               let res = buildVal ioRef
                    newState = stmState{touchedTVars = case IntMap.lookup id (touchedTVars stmState) of
                                                         Just _  -> touchedTVars stmState
                                                         Nothing -> IntMap.insert id (io lock)
@@ -150,14 +149,13 @@ readTVar (TVar mv id waitQ lock) = STM (\stmState -> do
                                        --entering the value in the writeSet prevents the transaction
                                        --to read a TVar multiple times on IO level
                                        writeSet = IntMap.insert id 
-                                                      (unsafeCoerce res, unsafeCoerce mv, [waitQ])
+                                                      (unsafeCoerce res, unsafeCoerce ioRef, [waitQ])
                                                       (writeSet stmState)}
                return (Success newState [waitQ] res))
 
 --If the evaluation is demanded before the commit phase, it may lead to non inteded behaviour
-{-# NOINLINE buildVal #-}
-buildVal :: MVar a -> OneTuple a
-buildVal ioRef = unsafePerformIO $ {-print "IORead" >>-} readMVar ioRef >>= return . OneTuple
+buildVal :: IORef a -> OneTuple a
+buildVal ioRef = unsafePerformIO $ {-print "IORead" >>-} readIORef ioRef >>= return . OneTuple
 
 --using io actions to collect locks for tvars of different types in one collection
 --used for implicit locks
@@ -216,9 +214,8 @@ atomically stmAction = do
           if isNothing valid
             then do
               mapM_ (flip seq (return ())) (garbage newState)
-              writer <- write $ IntMap.elems (writeSet newState)
               notifys newState
-              writer
+              write $ IntMap.elems (writeSet newState)
               sequence_ unlocker
               return res
             else do
@@ -259,15 +256,14 @@ filt iden@(id:ids) act@(io:ios) w@(wid:wids)
 --otherwise the some values may be overwritten before they are read
 --for details look at swapText which fail when read and write is done
 --in one traverse.
-write :: [(OneTuple (),MVar(), Deps)] -> IO (IO ())
+write :: [(OneTuple (),IORef(), Deps)] -> IO ()
 write ws = do
-    (writes, locks) <- readWS ws
-    locks
-    return writes
-  where readWS []               = return (return (),return())
-        readWS ((OneTuple a,ref,_deps):xs)   = do
-             (ws,locks) <- readWS xs
-             return ((putMVar ref a >> ws), takeMVar ref >> locks)
+    writes <- readWS ws
+    writes
+  where readWS []               = return (return ())
+        readWS ((OneTuple a,ref,_deps):xs)   = do 
+             ws <- readWS xs
+             return (writeIORef ref a >> ws)
              
 startSTM :: STM a -> StmState -> IO (STMResult a)
 startSTM stmAct@(STM stm) state = stm state
