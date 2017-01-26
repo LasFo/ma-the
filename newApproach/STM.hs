@@ -1,7 +1,7 @@
 module STM
-           (STM(STM), STMResult(Success), TVar(TVar), 
+           (STM(STM), STMResult(Success), TVar(TVar), writeTVar',
             newTVar, readTVar, writeTVar, eval, atomically,
-            retry, orElse, (<**>), (>*<), (**>),
+            retry, orElse, (<**>), (>*<), (**>), check, 
             (<*>), (*>), pure, T.sequenceA) where
 
 import Prelude
@@ -159,6 +159,10 @@ readTVar (TVar mv id waitQ lock) = STM (\stmState -> do
 buildVal :: MVar a -> OneTuple a
 buildVal ioRef = unsafePerformIO $ {-print "IORead" >>-} readMVar ioRef >>= return . OneTuple
 
+
+check :: Bool -> STM ()
+check True  = return ()
+check False = retry
 --using io actions to collect locks for tvars of different types in one collection
 --used for implicit locks
 io :: MVar a -> IO(IO())
@@ -184,6 +188,9 @@ writeTVar (TVar ioRef id waitQ lock) (STM act)  = STM (\stmState -> do
                  return (Success finState [] (return ()))
               Retry newState -> return $ Retry newState
               InValid -> return InValid) 
+
+writeTVar' :: TVar a -> a -> STM ()
+writeTVar' = flip $ flip writeTVar . pure
 {-
 rwIO :: IO a -> IORef a -> IO (IO ())
 rwIO act ref = do
