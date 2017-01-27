@@ -1,1 +1,7 @@
-inhomogenous data structure to specify informations for single entries.
+total_unsafPerformIO weiter untersuchen
+
+
+remove MVar from waitQ 
+   performance vs memory
+ should this be configurable?
+ none of my testCases (besides memTest) produces memory leaks

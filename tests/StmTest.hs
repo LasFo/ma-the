@@ -1,4 +1,4 @@
-module Main where
+module StmTest where
 
 import Control.Concurrent
 --import Control.Concurrent.STM

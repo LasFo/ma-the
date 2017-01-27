@@ -20,6 +20,8 @@ import qualified Data.Traversable as T
 tvars = 3
 
 main = do 
+  print "Desired output: sorted List"
+  print "Expected output: no output, because the printer is rolled back all the time."
   tvs <- atomically $ T.sequenceA $ replicate tvars (newTVar 0) 
   sequence $  map (forkIO . increaser) tvs
   sortPrint tvs

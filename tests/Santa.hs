@@ -99,6 +99,8 @@ santa elf_gp rein_gp = do
                                  return (task, gates) 
 
 main = do
+  print "Desired output: Santa delivers presents or teachings without end."
+  print "Compilation may be needed to produce readable output."
   reinGroup <- newGroup 9
   elvesGroup <- newGroup 3
   mapM_ (reindeer reinGroup) [1..9]

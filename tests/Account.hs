@@ -1,3 +1,4 @@
+module Account where
 --A basic bank account implementation.
 --This may serve as a basis for further test,
 --but was implementated since it is a basic example
@@ -27,6 +28,7 @@ transfer :: Account -> Account -> Int -> STM ()
 transfer src dst am = withdraw src am *> deposite dst am
 
 main = do
+  putStrLn "Desired output: [80,50,170]"
   [acc1,acc2,acc3] <- atomically $ sequenceA $ replicate 3 (newTVar 100)
   atomically $ transfer acc2 acc3 20 *> 
                transfer acc1 acc2 30 *> 

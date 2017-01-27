@@ -1,9 +1,12 @@
+module BugTest where
+
 import STM
 
 main = do 
   t1 <- atomically $ newTVar 0
   t2 <- atomically $ newTVar 0
   a <- atomically $ transaction t1 t2
+  print "Desired output: 0"
   print a
 
 

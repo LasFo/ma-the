@@ -1,3 +1,5 @@
+module ModTest where
+
 import STM
 import Control.Concurrent (forkIO)
 import Data.List ((!!))
@@ -19,6 +21,7 @@ import qualified Data.Traversable as T
 --If it is not correct the result may vary or the test case deadlocks.
 
 main = do
+    putStrLn "Desired output: 125000."
     sync <- atomically $ newTVar 2 
     tvs <- atomically $ T.sequenceA $ map newTVar [42,73,0]
     forkIO $ do perform 10000 (inc (tvs !! 2))

@@ -10,7 +10,8 @@ import System.IO.Unsafe
 --given the error should not occur. In an implementation without true conistency
 --the error could occur.
 
-main = do [t1,t2] <- atomically $ sequence [newTVar 0, newTVar 0]
+main = do print "Desired output: increasing Ints. Exception indicates weak consistency."
+          [t1,t2] <- atomically $ sequence [newTVar 0, newTVar 0]
           forkIO (loopCheck t1 t2)
           increment t1 t2
 
