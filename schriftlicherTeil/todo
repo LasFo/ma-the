@@ -1,5 +1,8 @@
 taxonomie for TM properties
-improve the need for composability to further motivate transactions
-motivate transaction in general
-why is STM cool in Haskell and in other languages not that cool
+  Deferred vs Direct Updates  
 validation after dispatch is imortant for strong consistency
+  Concurrency Control
+  Early and Late Conflict Detection
+why is STM cool in Haskell and in other languages not that cool
+  Strong vs Weak Isolation
+motivate transaction in general

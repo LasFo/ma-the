@@ -1,6 +1,10 @@
 total_unsafPerformIO weiter untersuchen
 
 
+>>= should not evaluate value
+
+see if validation is better than notification
+
 remove MVar from waitQ 
    performance vs memory
  should this be configurable?

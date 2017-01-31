@@ -15,7 +15,6 @@ import Data.Maybe (isNothing, fromJust)
 import qualified Data.IntMap.Lazy as IntMap
 import Control.Applicative
 import qualified Data.Traversable as T
-import Data.Tuple.OneTuple
 
 -----------------------
 -- The STM Classes   --
@@ -68,10 +67,10 @@ instance Monad STM where
   (STM tr1)  >>= k = STM (\state -> do
                stmRes <- tr1 state
                case stmRes of
-                 Success newState (Just val) -> do
+                 Success newState wVal -> do
                    valid <- tryTakeMVar $ retryMVar state
                    if isNothing valid 
-                      then do let (STM tr2) = k val 
+                      then do let (STM tr2) = k $ fromJust wVal 
                               tr2 newState
                       else return InValid
                  Retry newState -> return (Retry newState)

@@ -5,7 +5,7 @@
 
 \section{Software Transactional Memory}
 \label{STMInterface}
-Software Transactional Memory (STM in the following) is a programming language independent synchronization concept. Today STM is implemented 
+Software Transactional Memory (STM in the following) is a programming language independent synchronization concept. Today STM is available 
 in all common programming languages\footnote{Even though STM is language independent, I will present the STM library in Haskell since this thesis is
 about STM in Haskell}. To understand the benefits of STM, take a look at the following example:
 \begin{lstlisting}
@@ -53,15 +53,15 @@ transfer src dst am = do
   putMVar dst (dstBal + am)
 \end{lstlisting}
 This indeed solves the problem regarding the deadlock. In return we lose consistency. For a brief moment we see an inconsistent state. Since
-the amount was allready subtracted from one account, but not yet added to the other account. This inconsistent state is observable by other 
-threads. This was not possible in the first implementation. 
+the amount is allready subtracted from one account, but not yet added to the other account. This inconsistent state is observable by other 
+threads. This is not possible in the first implementation. 
 
 We can use STM to avoid these problems. STM provides a single element buffer named \code{TVar}. A TVar always holds an value and is never 
 empty. TVars are read and written with the functions \code{readTVar} and \code{writeTVar}, respectively. 
-In contrast to \code{putMVar} and \code{takeMVar}, the TVar operations are not \code{IO} actions but \code{STM} action\footnote{For 
-those who are wondering when I use \code{SMT} and when STM. I use \code{STM} when I refer to the Haskell type contstructor and STM when I refer to STM as library}. 
-\code{STM} is an instance of Monad, hence multiple STM actions can be combined
-using the comfortable do-notation. The following code represents the example from above implemented with TVars rather than MVars:
+In contrast to \code{putMVar} and \code{takeMVar}, the TVar operations are not \code{IO} actions but \code{STM} action\footnote{If 
+you are wondering when I use \code{SMT} and when STM. I use \code{STM} when I refer to the Haskell type constructor and STM when I refer to STM as library}. 
+\code{STM} is an instance of Monad, hence multiple \code{STM} actions can be combined
+using the comfortable do-notation. The following code represents the example from above implemented with TVars instead of MVars:
 \begin{lstlisting}
 type Account = TVar Int
 
@@ -72,11 +72,11 @@ transfer src dst am = do
   writeTVar src (srcBal - am)
   writeTVar dst (dstBal + am)
 \end{lstlisting}
-Note the type of transfer is no longer an \code{IO} action, but an \code{STM} action. Besided this the code looks
+Note the type of transfer is no longer an \code{IO} action, but an \code{STM} action. Apart from this the code looks
 similar to the MVar version.
 
 In order to execute a transaction the function \code{atomically :: STM a -> IO a} is used. 
-Since \code{readTVar} and \code{writeTVar} do not lock the TVar, the following exmaple evokes no deadlock:
+Since \code{readTVar} and \code{writeTVar} do not lock the TVar, the following example contains no deadlock:
 \par\noindent
 \begin{minipage}[t]{.45\textwidth}
 Thread 1:
@@ -96,7 +96,8 @@ main = do
 \end{lstlisting}
 \end{minipage}
 
-Furthermore ensures STM the \keyword{ACID} properties. The ACID properties were Introduced in \parencite{DBTrans}.
+This is because STM ensures the \keyword{ACID} properties. The ACID properties were Introduced in \parencite{DBTrans} for
+database transactions. These properties were adapted for software transactions later on.
 In the case of software transactions the ACID properties mean the following:
 \begin{itemize}
  \item \keyword{Atomicity}: the transaction executes all operations or none.
@@ -104,9 +105,9 @@ In the case of software transactions the ACID properties mean the following:
  \item \keyword{Isolation}: no concurrency is observable by a transaction. Each transaction can work as if it is the only transaction.
  \item \keyword{Durability}: ensures the perseverance of the changes. In the case of software transactions this is not necessary.
 \end{itemize}
-These properties explain the name \code{atomically}, because the enclosed code appears to be executed instantaneously wihtout any 
+These properties explain the name \code{atomically}, because the enclosed code appears to be executed instantaneously without any 
 interactions with other threads.
-Before we turn over to the implementation of STM, we take a deeper look at the interace of the STM.
+Before we turn over to the implementation of STM, we take a deeper look at the interface of the STM.
 
 \code{newTVar :: a -> STM (TVar a)} creates a newTVar. Since a TVar always holds a value, an initial value has to be
 passed to create a TVar. There is no function like \code{newEmptyTVar}. 
@@ -117,26 +118,72 @@ is \textbf{not} restarted immediately. The transaction restarts, if at least one
 restart immediately (and no TVar has changed), the transaction would run into the same \code{retry} again. 
 
 With \code{orElse :: STM a $\rightarrow$ STM a $\rightarrow$ STM a} you are able to express alternatives. \code{orElse} executes the first transaction
-and ignores the second transaction, if the first transaction is successful. If the frist transaction fails (retries), the second transaction is 
+and ignores the second transaction, if the first transaction is successful. If the first transaction fails (retries), the second transaction is 
 executed instead of the first one.
 
 Note that it is not possible to execute \code{IO} action within a transaction, which means that not side effects can occur. Furthermore this means
-restarting a transaction will never lead to the reexecution of irreversible operations. The reason is that the computations of transactions
+restarting a transaction will never lead to the re-execution of irreversible operations. The reason is that the computations of transactions
 are done within the \code{STM} Monad. In other words the type system of Haskell forces us to write correct transactions. 
+
+For single threaded programming, abstraction and composability are key features. These features allow us to combine smaller pieces
+of code into more complex pieces of code. These feature are not available for lock based concurrent programming. Compose correct lock based
+concurrent functions most likely lead to deadlocks or inconsistencies. Consider the following example:
+\begin{lstlisting}
+withdraw :: Account -> Int -> IO()
+withdraw acc am = do 
+  bal <- takeMVar acc 
+  putMVar acc (bal - am)
+ 
+deposit :: Account -> Int -> IO()
+deposit acc am = withdraw acc (-am)
+\end{lstlisting}
+These are functions to withdraw and deposit money from and on an account. The natural way to implement \code{transfer} is:
+\begin{lstlisting}
+transfer :: Account -> Account -> Int -> IO()
+transfer src dst am = do
+  withdraw src am
+  deposit dst am
+\end{lstlisting}
+We reuse the functions that are already defined instead of coding everything from the scratch. In our example this is equivalent 
+to the solution suggested above to eliminate the deadlock. This implementation is free of deadlocks, but it lacks consistency.
+Thus building complex concurrent operations can not take advantage of abstraction and composability. We always need to code
+everything from the scratch. This is error prone in compared to the step wise combination of smaller operations into 
+bigger operations.
+
+STM allows us to use this important programming paradigm for concurrent programming. Thus the following example provides
+deadlock freedom as well as consistency.
+\begin{lstlisting}
+withdraw :: Account -> Int -> STM()
+withdraw acc am = do 
+  bal <- readTVar acc 
+  writeTVar acc (bal - am)
+ 
+deposit :: Account -> Int -> STM()
+deposit acc am = withdraw acc (-am)
+
+transfer :: Account -> Account -> Int -> STM()
+transfer src dst am = do
+  withdraw src am
+  deposit dst am
+\end{lstlisting}
+We can combine arbitrary transactions to more complex transactions while preserving the ACI properties. This greatly benefits the 
+readability of the code. In addition it increases the efficiency of the development process, because we are able to reuse code
+that we already found to be correct. This was also one of the main motivations of paper \parencite{STMBase} which forms the foundation
+of STM in Haskell.
 
   
 \section{Implementation}
 I will now give an overview on the current implementation of STM in Haskell. For a detailed description of the implementation and the theory behind it
-refer to \parencite{STMBase}. Afterwards I will analyize the problems with this implementation.
+refer to \parencite{STMBase}. Afterwards I will analyze the problems with this implementation.
 
 Even though the current implementation uses a low level C-library, I will retain an abstract view on the implementation, since the technical 
-details are not important for the course of this thesis. I will present an abstract view on the implementation to understand how the ACID 
+details are not important for the course of this thesis. I will present an abstract view on the implementation to understand how the ACI 
 properties are ensured.
 
 The execution of a transaction (a call of \code{atomically}) is split in two phases. First the computation phase and second the commit phase. 
  
 \subsection{Computation Phase}
-In this phase the operations that were written by the user are evaluated. To preseve the ACID properties, the \code{writeTVar} 
+In this phase the operations that were written by the user are evaluated. To preseve the ACI properties, the \code{writeTVar} 
 operations do not write the actual TVars immediately. Instead the a data structure called \keyword{writeSet} is used. The 
 writeSet stores pairs of TVar and value. The 
 writeSet fulfills two purposes. First, if a transactions finishes and is found to be valid it needs to commit its changes to the 
@@ -165,11 +212,11 @@ This code would lead to the following readSet and writeSet:
  readSet  = {(t1,0),(t2,0)}
  writeSet = {(t1,b),(t2,a)}
 \end{lstlisting}
-Note that the version numbers in the readSet are arbitrarily choosen for this example. The exact value is not important, it only needs to be updated 
-to a new unique value everytime it is written by a successful transaction. In this case an increment operation 
+Note that the version numbers in the readSet are arbitrarily chosen for this example. The exact value is not important, it only needs to be updated 
+to a new unique value every time it is written by a successful transaction. In this case an increment operation 
 is enough to create a new unique value (if we ignore the overflow problem). 
 
-\code{newTVar} creates a new TVar and initializes this TVar. Afterwards this TVar can be used like allready existing TVars.
+\code{newTVar} creates a new TVar and initializes this TVar. Afterwards this TVar can be used like already existing TVars.
 Even if the transaction is rolled back, the new created TVars are not deleted explicitly. This work is done by the garbage
 collector, since the TVars are not further referenced, if the transaction that created them is rolled back. 
 
@@ -194,7 +241,7 @@ by \code{trans2} are included. If the execution of \code{trans2} leads not to re
 \code{trans2} are the result of \code{transaction}. In that case \code{trans3} is ignored. 
 
 It is crucial that the readSet produced by \code{trans2} is preserved. Otherwise the TVars read by \code{trans2} may be changed and 
-\code{transaction} would not notice this. This would contradict the isolation of the ACID properties. 
+\code{transaction} would not notice this. This would contradict the isolation of the ACI properties. 
 
 In conclusion the interface functions of STM are processed as follows in the computation phase:
 \begin{itemize}
@@ -262,13 +309,32 @@ After the reexecution of the computation phase the readSet would contain \code{(
 The validation succeeds and the writeSet is published. The result is the intended one. After executing an atomic increment
 and an atomic decrement, the TVar value is the same as the inital value.
 
-If there were no validation, \code{transaction2} would also commit at this point in the first try. Thus the value of \code{t1} would be set to \code{6}. This would violate 
-the ACID properties. Assuming that the decrement and increment operations are atomic operation, the value of a TVar should not change if it is 
-incremented and decremented once.
+If there were no validation, \code{transaction2} would also commit at this point in the first try. Thus the value of \code{t1} would be set to \code{6}. 
+This would violate the ACI properties. Assuming that the decrement and increment operations are atomic operation, 
+the value of a TVar should not change if it is incremented and decremented once.
 
+\subsection{Notes on the Implementation}
+Larus and Rajwar describe in their book\parencite[Chapter 2]{transBook} different design options to be done when implementing a 
+(Software) Transactional Memory. While most of these options effect the performance of a system, some also effect the 
+semantics of the system. I will now explain the for this thesis most important design options\footnote{The names used in the 
+following part are taken from \parencite[Chapter 2]{transBook}}.
+
+\textbf{Deferred and Direct Updates}. The way a STM system modifies the underlying data structure can either be \keyword{deferred}
+or \keyword{direct}. Direct updating systems are writing the actual objects when a write operation is called. In the case of Haskell 
+this would mean, every time \code{writeTVar} is called. Deferred updating systems on the other hand buffer their write operations to
+commit them later on. Haskell STM is a deferred updating system, since the values are buffered in the writeSet before they are
+committed. This design options does not effect the semantics of the system. While a direct system loses performance, when transaction
+is rolled back (because the initial values need to be restored), a deferred systems contains an overhead due to the writeSet and the 
+need to search this when an Object is read.
+
+\textbf{Early and Late Conflict Detection}. A STM system needs to detect conflicts in order to ensure the ACI properties. This can 
+be done as soon as the conflict occurs or at some point later before the transaction is committed. If the system uses a late conflict 
+detection, transaction may work on inconsistent states. This may leads to loops or exceptions. So this a semantic relevant design 
+decision. Haskell uses a late conflict detection
+Haskell STM uses a late conflict 
 
 \section{Problems}
-I will now explain two problems with this implmentation. These problems can be examined independently. The first problem is about
+I will now explain two problems with this implementation. These problems can be examined independently. The first problem is about
 \textit{when} a transaction is rolled back and the second problem is about \textit{how} a transaction is rolled back.
 
 \subsection{Unnecessary Rollback}
@@ -332,8 +398,8 @@ and \code{transaction2} is restarted.
 In conclusion no performance improvement was achieved. Both threads are still executed 
 on after another and not parallel as intended.
 
-if we rearrange the operations of \code{transfer}, we are able to see how this can be improved. Note that we can rearrange the 
-operations to a certain degree without changing the semantics of the resulting code due to the ACID properties. 
+If we rearrange the operations of \code{transfer}, we are able to see how this can be improved. Note that we can rearrange the 
+operations to a certain degree without changing the semantics of the resulting code due to the ACI properties. 
 \begin{lstlisting}
 transfer src dst am = do 
   srcBal <- readTVar src
