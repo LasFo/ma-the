@@ -26,8 +26,8 @@ import Data.List
 --namely: threads * iter * changes.
 --Otherwhise the result may vary or the test case deadlocks.
 
-threads = 5
-iter    = 100
+threads = 25
+iter    = 1000
 tvars   = 20
 changes = 50
 

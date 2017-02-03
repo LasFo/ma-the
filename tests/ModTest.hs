@@ -41,7 +41,7 @@ main = do
            writeTVar t3
        
 waitForZero :: TVar Int -> STM ()
-waitForZero tv = 
+waitForZero tv =
   readTVar tv >>= 
   (\val -> if val == 0
              then return ()
