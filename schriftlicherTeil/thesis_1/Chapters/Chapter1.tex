@@ -258,9 +258,10 @@ At first the transaction locks all TVars in its readSet in order to avoid concur
 If a transcation tries to aquire a lock that is already locked, it releases all its locks restarts the commit phase to
 avoid deadlocks.
 
-Then the transactions validates\footnote{The transaction not only validates in the commit phase, but also every time the executing
-thread yields. This is necessary to detect and roll back transactions, that execute an infinite loop, because they saw inconsistent
-data.}. Remember that the readSet is a collection of pairs consisting of a TVar and a version number.
+Then the transactions validates.%\footnote{The transaction not only validates in the commit phase, but also every time the executing
+%thread yields. This is necessary to detect and roll back transactions, that execute an infinite loop, because they saw inconsistent
+%data.}
+Remember that the readSet is a collection of pairs consisting of a TVar and a version number.
 It is sufficient to compare the version numbers stored in the readSet with the version numbers in the actual TVars to validate. 
 If all version numbers match, it means the transactions has seen a consistent state
 of the system, because no TVar has changed after it was read by the transaction. Thus the transaction is valid.
@@ -316,22 +317,28 @@ the value of a TVar should not change if it is incremented and decremented once.
 \subsection{Notes on the Implementation}
 Larus and Rajwar describe in their book\parencite[Chapter 2]{transBook} different design options to be done when implementing a 
 (Software) Transactional Memory. While most of these options effect the performance of a system, some also effect the 
-semantics of the system. I will now explain the for this thesis most important design options\footnote{The names used in the 
+semantics of the system. I will now discuss the design options that are important for this thesis \footnote{The names used in the 
 following part are taken from \parencite[Chapter 2]{transBook}}.
 
 \textbf{Deferred and Direct Updates}. The way a STM system modifies the underlying data structure can either be \keyword{deferred}
 or \keyword{direct}. Direct updating systems are writing the actual objects when a write operation is called. In the case of Haskell 
-this would mean, every time \code{writeTVar} is called. Deferred updating systems on the other hand buffer their write operations to
+this would mean, every time \code{writeTVar} is called. Deferred updating systems on the other hand buffer the write operations to
 commit them later on. Haskell STM is a deferred updating system, since the values are buffered in the writeSet before they are
 committed. This design options does not effect the semantics of the system. While a direct system loses performance, when transaction
-is rolled back (because the initial values need to be restored), a deferred systems contains an overhead due to the writeSet and the 
-need to search this when an Object is read.
+is rolled back, because the initial values need to be restored, a deferred systems contains an overhead due to the writeSet and the 
+need to look up values in it when an Object is read. Neither mechanism is better than the other; it depends on the application STM 
+is used in. \parencite{pessimisticSTM} compares a deferred and a direct system. They show that the performance of a direct update 
+system is significantly higher than that of a deferred system, when reads outnumber writes by far.
 
 \textbf{Early and Late Conflict Detection}. A STM system needs to detect conflicts in order to ensure the ACI properties. This can 
-be done as soon as the conflict occurs or at some point later before the transaction is committed. If the system uses a late conflict 
-detection, transaction may work on inconsistent states. This may leads to loops or exceptions. So this a semantic relevant design 
-decision. Haskell uses a late conflict detection
-Haskell STM uses a late conflict 
+be done as soon as the conflict occurs or at some point later before the transaction commits. If the system uses a late conflict 
+detection, transaction may work on an inconsistent state. This may leads to loops or exceptions. So this a semantic relevant design 
+decision. Haskell STM uses a late conflict detection. By validating the readSet before comitting the transaction a possible conflict
+is detected. This implies the transaction may work on an inconsistent state until it attempts to commit. This means the transaction 
+may run into an infinite loop, because it saw an inconsistent state. To avoid this problem, additional validations are performed
+each time the executing thread yields. Exceptions raised by the transaction are handled like a \code{retry}. If the readSet is valid,
+the transcation waits until at leas on TVar it has read is changed. If it is invalid the transaction is restarted immediately.
+In conclusion, the user of STM can not observe that the transaction worked on an inconsistent state.
 
 \section{Problems}
 I will now explain two problems with this implementation. These problems can be examined independently. The first problem is about
@@ -490,19 +497,22 @@ regardless which TVar was the reason for the failed validation.
 For example if \code{t1} was modified after the transaction read it, the transaction is rolled back and both 
 statements are executed again. This includes the read and write of \code{t2} although the value of 
 \code{t2} did not change. Hence the exact same code with same inputs and the same (relevant) environment is 
-executed twice. If we were able to invalidate parts of transactions instead of transactions as a whole, 
+executed twice. If we are able to invalidate parts of transactions instead of transactions as a whole, 
 we can save time when rolling back a transaction.  
+In the previous example we can use the information that only \code{t1} changed. If we roll back this 
+transaction, we onky need to execute the first two actions, because the last two actions do not depend 
+on \code{t1}.
 
-Some may argue it is not common to execute independent statements in a single transaction. However, I do not want  
-the performance of the STM library to rely on the capabilities of the programmer. 
-Furthermore do I not want to make any asssumption on how the library is most likely be used. 
-I am not sure if there
-are cases in which the execution of independent statements is needed, but I do not want the user to think 
-about this issue. The user should focus on the correctness of the code; the performance is the task of the
-library. 
+% Some may argue it is not common to execute independent statements in a single transaction. However, I do not want  
+% the performance of the STM library to rely on the capabilities of the programmer. 
+% Furthermore do I not want to make any asssumption on how the library is most likely be used. 
+% I am not sure if there
+% are cases in which the execution of independent statements is needed, but I do not want the user to think 
+% about this issue. The user should focus on the correctness of the code; the performance is the task of the
+% library. 
 
-TODO: this technique may even be used for dependent statements aswell by reexecuting just tails of a dependence
-chain instead of the whole dependent chains
+% TODO: this technique may even be used for dependent statements aswell by reexecuting just tails of a dependence
+% chain instead of the whole dependent chains
 
 This concludes the overview on the problems of the current STM implementation. We will now turn over to the 
 solution for this problems.
