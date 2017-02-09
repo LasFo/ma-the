@@ -173,8 +173,9 @@ of STM in Haskell.
 
   
 \section{Implementation}
-I will now give an overview on the current implementation of STM in Haskell. For a detailed description of the implementation and the theory behind it
-refer to \parencite{STMBase}. Afterwards I will analyze the problems with this implementation.
+I will now give an overview on the current implementation of STM in Haskell. For a detailed description of the implementation 
+refer to \url{https://ghc.haskell.org/trac/ghc/wiki/Commentary/Rts/STM}. 
+Afterwards I will analyze the problems with this implementation that I aim to fix within this thesis.
 
 Even though the current implementation uses a low level C-library, I will retain an abstract view on the implementation, since the technical 
 details are not important for the course of this thesis. I will present an abstract view on the implementation to understand how the ACI 
@@ -183,6 +184,40 @@ properties are ensured.
 The execution of a transaction (a call of \code{atomically}) is split in two phases. First the computation phase and second the commit phase. 
  
 \subsection{Computation Phase}
+Each transaction holds a log for the TVars it has accessed. The log contains three elements per entry. These are: 
+\begin{itemize}
+ \item tvar
+ \item expectedValue
+ \item newValue
+\end{itemize}
+These log is extenden and modified by the transactional operations \code{writeTVar} and \code{readTVar}. \code{newTVar} on 
+the other hand creates the new TVar directly. Whenever \code{readTVar} is called the associated TVar is lookep up in the log.
+If it is present, the \code{newValue} is returned. If it is not present, a new entry for the log is created. While \code{tvar}
+is the TVar that is passed to \code{readTVar}, \code{newValue} and \code{expectedValue} are the actual value of the TVar.
+This is the one of the two times in the computation phase when the transaction accesses the actual mutable data structures.  
+After the entry is created and added to the log, the actual value is returned. 
+
+A call of \code{writeTVar} also looks up the associated TVar in the log. If it is present, the value of \code{newValue} is 
+set to the value passed to writeTVar. If it is not present, a new entry is created. The \code{tvar} is the passed TVar and
+the \code{newValue} is the passed value and \code{expectedValue} is the actual value of that TVar. This is the other time 
+the actual mutable data structures are accessed in the computation phase. 
+
+This log fulfills two purposes. We have already seen the first. The \code{readTVar} operations are able to see the results 
+of preceding \code{writeTVar} operations. Otherwise \code{writeTVar} would need to access the actual TVar. This on the 
+other hand would imply that other transactions would be able to see inconsistent intermediate states of the system;
+a violation of the ACI properties. It may seem unnecessary to read a TVar that the transaction itself wrote before.
+The transaction should know what it writes and thus need not to access such TVars. Nevertheless there are two reasons 
+to allow it. The current implementation allow the user to combine all transactional actions in an arbitrary manner and 
+the library ensures (at compile time) that it works correctly. To restrict the user to only read TVar he has
+not yet written, no longer allows the library to give this kind of guarantee at compile time; this contradicts
+the design concept of Haskell. The second reason is one of the core motivations of STM in Haskell: composability.
+With the restriction it is not possible to combine arbitrary correct STM functions to new more complex STM
+functions. The other purpose of the log is the use in the commit phase which is described in \ref{Sec:STMImpl}.
+
+
+
+
+
 In this phase the operations that were written by the user are evaluated. To preseve the ACI properties, the \code{writeTVar} 
 operations do not write the actual TVars immediately. Instead the a data structure called \keyword{writeSet} is used. The 
 writeSet stores pairs of TVar and value. The 
@@ -253,8 +288,10 @@ In conclusion the interface functions of STM are processed as follows in the com
 \end{itemize}
 
 \subsection{Commit Phase}
+\label{Sec:STMImpl}
 After the readSet and writeSet are calculated and no further STM actions need to be processed, the commit phase starts.
-At first the transaction locks all TVars in its readSet in order to avoid concurrency problems at this point.
+At first the transaction locks all TVars in its readSet in order to avoid concurrency problems at this point. 
+%TODO validate -> lock -> validate
 If a transcation tries to aquire a lock that is already locked, it releases all its locks restarts the commit phase to
 avoid deadlocks.
 
@@ -320,7 +357,7 @@ Larus and Rajwar describe in their book\parencite[Chapter 2]{transBook} differen
 semantics of the system. I will now discuss the design options that are important for this thesis \footnote{The names used in the 
 following part are taken from \parencite[Chapter 2]{transBook}}.
 
-\textbf{Deferred and Direct Updates}. The way a STM system modifies the underlying data structure can either be \keyword{deferred}
+\subsubsection{Deferred and Direct Updates} The way a STM system modifies the underlying data structure can either be \keyword{deferred}
 or \keyword{direct}. Direct updating systems are writing the actual objects when a write operation is called. In the case of Haskell 
 this would mean, every time \code{writeTVar} is called. Deferred updating systems on the other hand buffer the write operations to
 commit them later on. Haskell STM is a deferred updating system, since the values are buffered in the writeSet before they are
@@ -330,7 +367,7 @@ need to look up values in it when an Object is read. Neither mechanism is better
 is used in. \parencite{pessimisticSTM} compares a deferred and a direct system. They show that the performance of a direct update 
 system is significantly higher than that of a deferred system, when reads outnumber writes by far.
 
-\textbf{Early and Late Conflict Detection}. A STM system needs to detect conflicts in order to ensure the ACI properties. This can 
+\subsubsection{Early and Late Conflict Detection} A STM system needs to detect conflicts in order to ensure the ACI properties. This can 
 be done as soon as the conflict occurs or at some point later before the transaction commits. If the system uses a late conflict 
 detection, transaction may work on an inconsistent state. This may leads to loops or exceptions. So this a semantic relevant design 
 decision. Haskell STM uses a late conflict detection. By validating the readSet before comitting the transaction a possible conflict
@@ -339,6 +376,18 @@ may run into an infinite loop, because it saw an inconsistent state. To avoid th
 each time the executing thread yields. Exceptions raised by the transaction are handled like a \code{retry}. If the readSet is valid,
 the transcation waits until at leas on TVar it has read is changed. If it is invalid the transaction is restarted immediately.
 In conclusion, the user of STM can not observe that the transaction worked on an inconsistent state.
+
+\subsubsection{Synchronization} The last important property of a STM system is the way it synchronizes transactions. In order to validate
+correctly the transaction needs to make sure the validation result does not depend on race conditions and is correct until the commit 
+is completed. This means either concurrent transactions are delayed or their commit does not change the validity. In Haskell the first
+approach is taken. When a transaction commits, the TVars in the writeSet are locked, thus other transactions that may conflict are not 
+able to commit at the same time. In order to avoid a deadlock when two transaction try to lock mutual TVars\footnote{(e.g. transaction1 holding
+tvar1 and tries to lock tvar2 and transaction2 holds tvar2 and tries to lock tvar1)}, all locks are released and the transaction
+is rolled back if it tries to aquire the lock for a locked TVar. In the worst case this lead to the roll back of both transactions, 
+however the chances are narrow. Rolling back the transaction seems to be harsh instead of waiting until the other transaction finishes 
+and then trying to commit, but if two transactions try to lock the same TVar, both transactions try to write this TVar. 
+This means at least one of the transactions is rolled back, since the writeSet is a subset of the readSet. 
+Thus the first transaction to commit would modify a value in the readSet of the other transcation.
 
 \section{Problems}
 I will now explain two problems with this implementation. These problems can be examined independently. The first problem is about

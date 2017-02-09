@@ -1,4 +1,8 @@
 total_unsafPerformIO weiter untersuchen
+memory leaks due to retry
+  -> remove retMVar after awaken
+
+process read before locking to avoid sequentialization
 
 
 partial rollbacks 
