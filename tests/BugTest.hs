@@ -12,8 +12,8 @@ main = do
 
 transaction :: TVar Int -> TVar Int -> STM Int
 transaction t1 t2 = do
-   a <- eval $ readTVar t1
-   writeTVar t1 $ pure 42
-   writeTVar t2 $ pure 73
-   a 
+   a <- readTVar t1
+   writeTVar t1 42
+   writeTVar t2 73
+   return a 
   

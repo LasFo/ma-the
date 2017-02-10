@@ -13,11 +13,11 @@ main = do
   GetTest.main
   putStrLn "------------ModTest-----------" 
   ModTest.main
-  putStrLn "------------SwapTest-----------" 
+  putStrLn "-----------SwapTest-----------" 
   SwapTest.main
   putStrLn "------------BugTest-----------" 
   BugTest.main
-  putStrLn "------------EvalTest-----------" 
+  putStrLn "-----------EvalTest-----------" 
   EvalTest.main
   putStrLn "------------StmTest-----------"
   putStrLn $ "Desired output: " ++ (show (StmTest.threads * StmTest.iter * StmTest.changes))  

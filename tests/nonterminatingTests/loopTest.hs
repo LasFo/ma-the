@@ -34,8 +34,8 @@ chek t1 t2 = do
 increment :: TVar Int -> TVar Int -> IO()
 increment t1 t2 = do atomically $ do val1 <- readTVar t1
                                      val2 <- readTVar t2
-                                     writeTVar t1 $ pure (val1 + 1)
-                                     writeTVar t2 $ pure (val2 + 1)
+                                     writeTVar t1 (val1 + 1)
+                                     writeTVar t2 (val2 + 1)
                      increment t1 t2
  
 

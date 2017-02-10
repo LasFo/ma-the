@@ -28,7 +28,7 @@ main = do
   
 increaser :: TVar Int -> IO ()
 increaser tv = do
-  atomically $ (readAndModify tv (+1)) **> writeTVar tv
+  atomically $ (readAndModify tv (+1)) >>= writeTVar tv
   --threadDelay 1
   increaser tv
   
@@ -47,5 +47,5 @@ sortAndReturn tvs =
   (T.sequenceA $ map readTVar tvs) <**>
   pure sort >>=
   (\ls -> 
-    T.sequenceA (zipWith writeTVar tvs (map pure ls)) *>
+    T.sequenceA (zipWith writeTVar tvs ls) *>
     T.sequenceA  (map readTVar tvs))

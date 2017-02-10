@@ -35,7 +35,7 @@ main = do sync <- atomically $ newTVar threads
           ts <- atomically $ T.sequenceA $ replicate tvars (newTVar 0)
           sequence $ replicate threads (forkIO $ do
                                            performM iter ts 
-                                           atomically $ readTVar sync <**> pure (subtract 1) **> writeTVar sync)
+                                           atomically $ readTVar sync >>= (writeTVar sync).(subtract 1))
                                            --atomically $ readTVar sync *>> writeTVar sync . 
                                              --                             fmap (subtract 1))
           atomically $ waitZero sync
@@ -71,7 +71,7 @@ performM n tvs = do
   positions <- sequence (replicate changes $ randomRIO (0,tvars-1))
   atomically $ do 
       let tvs'   = map (tvs!!) positions
-          fun tv = fmap (+1) (readTVar tv) **> writeTVar tv 
+          fun tv = fmap (+1) (readTVar tv) >>= writeTVar tv 
       mapM_ fun tvs'
   performM (n-1) tvs
 

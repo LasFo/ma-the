@@ -22,17 +22,16 @@ main = do
 --eval is now safe, and does not lead to multiple IOReads
 --Every transaction reads every TVar (on IO level) at most once.
 swap t0 t1 = do
-  a <- eval $ readTVar t0
-  readTVar t1 **> writeTVar t0
+  a <- readTVar t0
+  readTVar t1 >>= writeTVar t0
   writeTVar t1 a
 
 transaction t0 t1 = do
-  readTVar t0 <**> pure (+1) **> writeTVar t0
-  readTVar t0 <**> pure (+1) **> writeTVar t0
+  readTVar t0 <**> pure (+1) >>= writeTVar t0
+  readTVar t0 <**> pure (+1) >>= writeTVar t0
 
 share :: TVar Int -> TVar Int -> STM ()
 share t0 t1 = do
-  val <- eval $ readTVar t0
-  let newVal = fmap (unsafePerformIO $ putStr "evaled" >> return (+1)) val
+  newVal <- fmap (unsafePerformIO $ putStr "evaled" >> return (+1)) (readTVar t0)
   writeTVar t0 newVal
   writeTVar t1 newVal 

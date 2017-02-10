@@ -36,11 +36,11 @@ passGate :: Gate -> IO()
 passGate (MkGate n tv) = atomically $ do
   n_left <- readTVar tv
   check (n_left > 0)
-  writeTVar' tv $ n_left - 1
+  writeTVar tv $ n_left - 1
 
 operateGate :: Gate -> IO()
 operateGate (MkGate n tv) = do
-  atomically $ writeTVar' tv n
+  atomically $ writeTVar tv n
   atomically $ do n_left <- readTVar tv
                   check (n_left == 0)
 
@@ -55,7 +55,7 @@ joinGroup :: Group -> IO (Gate,Gate)
 joinGroup (MkGroup n tv) = atomically $ do
   (n_left,g1,g2) <- readTVar tv
   check (n_left > 0)
-  writeTVar' tv (n_left-1,g1,g2)
+  writeTVar tv (n_left-1,g1,g2)
   return (g1,g2)
 
 awaitGroup :: Group -> STM (Gate,Gate)
@@ -64,7 +64,7 @@ awaitGroup (MkGroup n tv) = do
   check (n_left == 0)
   new_g1 <- newGate n
   new_g2 <- newGate n
-  writeTVar' tv (n,new_g1,new_g2)
+  writeTVar tv (n,new_g1,new_g2)
   return (g1,g2)
 
 elf :: Group -> Int -> IO ThreadId

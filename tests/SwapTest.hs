@@ -11,8 +11,8 @@ main = do
   main2
 
 rotate t1 t2 t3 = do
-  readTVar t3 **> writeTVar t1
-  readTVar t2 **> writeTVar t3
+  readTVar t3 >>= writeTVar t1
+  readTVar t2 >>= writeTVar t3
 
 
 main2 = do 
@@ -24,6 +24,6 @@ main2 = do
 
 
 swap t1 t2 = do
-  v1 <- eval (readTVar t1) 
-  readTVar t2 **> writeTVar t1
+  v1 <- readTVar t1 
+  readTVar t2 >>= writeTVar t1
   writeTVar t2 v1

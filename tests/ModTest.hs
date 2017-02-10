@@ -25,19 +25,19 @@ main = do
     sync <- atomically $ newTVar 2 
     tvs <- atomically $ T.sequenceA $ map newTVar [42,73,0]
     forkIO $ do perform 10000 (inc (tvs !! 2))
-                atomically $ (readAndModify sync (subtract 1)) **> writeTVar sync 
+                atomically $ (readAndModify sync (subtract 1)) >>= writeTVar sync 
     forkIO $ do perform 1000 (add (head tvs) (tvs !! 2) (tvs !! 2))
-                atomically $ (readAndModify sync (subtract 1)) **> writeTVar sync 
+                atomically $ (readAndModify sync (subtract 1)) >>= writeTVar sync 
     perform 1000 $ add (tvs !! 1) (tvs !! 2) (tvs !! 2)
     atomically $ waitForZero sync
     a <- atomically $ readTVar (tvs !! 2)
     print a
- where inc t1       = writeTVar t1 (readAndModify t1 (+1))
+ where inc t1       = (readAndModify t1 (+1)) >>= writeTVar t1 
        add :: TVar Int -> TVar Int -> TVar Int -> STM ()
        add t1 t2 t3 = 
            pure (+) <*> 
            readTVar t1 <*> 
-           readTVar t2 **>
+           readTVar t2 >>=
            writeTVar t3
        
 waitForZero :: TVar Int -> STM ()

@@ -2,3 +2,6 @@
 why is STM cool in Haskell and in other languages not that cool
   Strong vs Weak Isolation
 motivate transaction in general
+Frasers page 42 as reference for potential related work, since 
+   the same problem occus in my implementation, when introducing a read phase
+   instead of locking all accessed points.

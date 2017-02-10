@@ -10,7 +10,7 @@ main = do
   putStrLn "Desired output: 'Inc now' should appear after 'Inc trans performed'. The last output is 1"
   tv <- atomically $ newTVar 0 
   tv2 <- atomically $ newTVar 0 
-  atomically $ readTVar tv2 >> readTVar tv <**> pure unsafeInc **> writeTVar tv 
+  atomically $ readTVar tv2 >> readTVar tv  >>= (writeTVar tv) . unsafeInc
   putStrLn "Inc trans performed"
   a <- atomically $ readTVar tv
   print a

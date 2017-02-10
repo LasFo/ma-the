@@ -45,11 +45,11 @@ stepper tvs = do
 step :: Int -> [Int] -> [TVar Int] -> [STM ()]
 step _   []     _    = []
 step acc (x:[])   (y:[])
-   | acc /= x  = (writeTVar' y acc) : []
+   | acc /= x  = (writeTVar y acc) : []
    | otherwise = []
 step acc (o:0:xs) (y:ys) 
-   | acc /= o  = (writeTVar' y acc) : step 0 (0:xs) ys
+   | acc /= o  = (writeTVar y acc) : step 0 (0:xs) ys
    | otherwise = step 0 (0:xs) ys
 step acc (n:m:xs) (y:ys) 
    | acc /= n  = step (m-1) (m:xs) ys
-   | otherwise = (writeTVar' y (acc + 1)) : step (m-1) (m:xs) ys 
+   | otherwise = (writeTVar y (acc + 1)) : step (m-1) (m:xs) ys 
