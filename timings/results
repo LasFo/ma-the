@@ -1,0 +1,10 @@
+     +RTS -N4            StmTest(20,1000,100,50)     StmTest(50,1000,100,20)
+Control.Concurrent.STM       3.3916                         3.5572
+Project.STM                  3.9700                         3.8548
+Master.STMLA                 4.2284                         3.5216
+Master.STMWSL1               4.1604                         3.5456
+Master.STMWSL2               4.1568                         4.0204
+
+
+
+GHC.STM no noticable jitter in execution time

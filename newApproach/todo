@@ -1,5 +1,8 @@
 total_unsafPerformIO weiter untersuchen
 
+read -> validate -> lock -> write
+   lock on MVar level
+
 process read before locking to avoid sequentialization
 
 

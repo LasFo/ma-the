@@ -1,4 +1,4 @@
-module STM
+module STMWSL2
            (STM, STMResult, TVar, 
             newTVar, readTVar, writeTVar, atomically,
             retry, orElse, (<**>), (**>), check, 

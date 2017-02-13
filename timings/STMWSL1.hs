@@ -1,4 +1,4 @@
-module STM
+module STMWSL1
            (STM, STMResult, TVar, 
             newTVar, readTVar, writeTVar, atomically,
             retry, orElse, (<**>), (**>), check, 
@@ -305,20 +305,6 @@ write ws rs = do
           --  putStrLn "Eval ws"
              (ws,locks) <- readWS xs
              return ((replace ref a >> ws), (ref,id) : locks)
-        process [] _rs            = return (return (), True)
-        process ((mv,_id):ws) []  = do cRef <- takeMVar mv
-                                       (unlocks, valids) <- process ws []
-                                       return (putMVar mv cRef >> unlocks, valids)
-        process wss@((mv,idW):ws) rss@((idR,(eRef,_,_)):rs) 
-           | idW < idR  = do cRef <- takeMVar mv
-                             (unlocks, valids) <- process ws rss
-                             return (putMVar mv cRef >> unlocks, valids)
-           | idW > idR  = process wss rs
-           | idW == idR = do cRef <- takeMVar mv
-                             if cRef /= eRef
-                                then return (putMVar mv cRef, False)
-                                else do (unlocks, valids) <- process ws rs
-                                        return (putMVar mv cRef >> unlocks, valids) 
              
 startSTM :: STM a -> StmState -> IO (STMResult a)
 startSTM stmAct@(STM stm) state = stm state
