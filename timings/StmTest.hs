@@ -1,7 +1,8 @@
 
+import System.Environment
 import Control.Concurrent
-import Control.Concurrent.STM
---import STMWSL2
+--import Control.Concurrent.STM
+import STMLA
 
 import qualified Data.Traversable as T
 import System.Random
@@ -25,12 +26,14 @@ import Data.List
 --namely: threads * iter * changes.
 --Otherwhise the result may vary or the test case deadlocks.
 
-threads = 10
-iter    = 20000
-tvars   = 15
-changes = 5
+--threads = 20
+iter    = 1000
+tvars   = 50 
+changes = 20
 
-main = do sync <- atomically $ newTVar threads 
+main = do args <- getArgs
+          let threads = read . head $ args
+          sync <- atomically $ newTVar threads 
           ts <- atomically $ T.sequenceA $ replicate tvars (newTVar 0)
           sequence $ replicate threads (forkIO $ do
                                            performM iter ts 

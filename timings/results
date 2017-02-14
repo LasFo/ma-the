@@ -1,9 +1,19 @@
-     +RTS -N4            StmTest(20,1000,100,50)     StmTest(50,1000,100,20)
-Control.Concurrent.STM       3.3916                         3.5572
-Project.STM                  3.9700                         3.8548
-Master.STMLA                 4.2284                         3.5216
-Master.STMWSL1               4.1604                         3.5456
-Master.STMWSL2               4.1568                         4.0204
+     +RTS -N4            StmTest(20,1000,100,50)     StmTest(50,1000,100,20)  StmTest(20,3000,30,15)
+Control.Concurrent.STM       3.3916                         3.5572                      2.8735 
+Project.STM                  3.9700                         3.8548                      3.0204
+Master.STMLA                 4.2284                         3.5216                      3.8980
+Master.STMWSL1               4.1604                         3.5456                      3.7948
+Master.STMWSL2               4.1568                         4.0204                      4.0048
+
+
+     +RTS -N4           PerTest(25,2000,50,7,5)     PerTest(50,2000,20,5,5)   PerTest(10,2000,20,5,5)
+Control.Concurrent.STM         4.9023                         8.6316                    1.6908
+Project.STM                    5.0528                         9.0596                    1.5756
+Master.STMLA                   5.2588                         9.2128                    1.8560
+Master.STMWSL1                 5.0632                         8.1800                    1.7472
+Master.STMWSL2                 5.0684                         7.5828                    1.7376
+
+
 
 
 
