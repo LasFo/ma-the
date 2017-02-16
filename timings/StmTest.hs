@@ -2,7 +2,7 @@
 import System.Environment
 import Control.Concurrent
 --import Control.Concurrent.STM
-import STMLA
+import STMWSL2
 
 import qualified Data.Traversable as T
 import System.Random
