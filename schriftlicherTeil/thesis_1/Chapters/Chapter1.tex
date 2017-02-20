@@ -427,16 +427,13 @@ This leads to two questions:
  \item How can we avoid or at least decrease rollbacks?
 \end{itemize}
 A transaction needs to be rolled back if it is operating on data that is not a snapshot of the current memory. In other words 
-if a value has changed after the transaction read this value. When a transactions reads a TVar, this TVar becomes 
+if a value has changed after the transaction read this value. When a transaction reads a TVar, this TVar becomes 
 \keyword{critical} for the transaction. Critical means a modifications of that TVar causes the transaction to roll back.
 Figure \ref{fig:criticalValue} visualizes when the TVars \code{acc1} and \code{acc2} are critical for \code{transaction1}.
 When \code{readTVar acc1} is executed the values becomes critical and stays critical until the transaction commits.
 If any other transaction commits a modification to \code{acc1} or \code{acc2}, while \code{acc1} and \code{acc2} are
-critical for \code{transaction1}, \code{transaction1} needs to be rolled back.
-
-
-
-%TODO explain why the rollback is needed bind monad
+critical for \code{transaction1}, \code{transaction1} is rolled back to preserve the ACI properties. A solution other
+than the roll back is presented in \ref{Prob:UnRe}. 
 
 This insight brings an intuitive way to deal with this problem. If we minimize the time the TVars are critical for
 a transaction we reduce the chance that this transaction is rolled back. 
@@ -461,23 +458,21 @@ execution of \code{readTVar} can reduce the time values are critical and by this
 \caption[CriticalValue2]{Effect of rearranging code with regards to the time \code{acc1} and \code{acc2} are critical for \code{transaction1}.}
 \label{fig:criticalValue2}
 \end{figure}
-Our aim is to delay the execution of \code{readTVar} as far as possible to avoid reduce to time that
+Our aim is to delay the execution of \code{readTVar} as far as possible to reduce to time that
 a TVar is critical for the transaction. We have already seen one option to achieve this; rearrange the 
 operations of a transaction. This would require a kind of preprocessing in the compiling process, for 
 example a source to source code transformation. The aim of this thesis is to provide an pure Haskell
-library that can be used like one. I do not want to implement an extension to the compiler nor do I 
+library. I do not intend to implement an extension to the compiler nor do I 
 want to provide a source to source code transformer. The only other option is to alter implementation
 of \code{readTVar} and \code{writeTVar} without changing the \keyword{external} semantics of STM. 
 External semantics are the semantics the user can observe and which effect the user written code.
 
-%TODO explain delay to commit phase. limmitation of approach explained in chapter 3
-
-CUT --- CUT --- CUT
-Transfer basically consists of two parts. Decreasing the balance of the source accound and increasing the 
-balance of the destination account. The actual values of \code{src} and \code{dst} are not important for
-these transactions. If we delay the evaluation of readTVar to the commit phase, we avoid the 
-aforementioned \textbf{unnecessary} rollback, because no transaction would read a value, that is overwritten
-by another transaction afterwards. 
+The critical time would be minimal if the TVars were read directly before or at the start of the commit phase.
+This would mean the chances that another transaction commits a change to a TVar that is critical are low or non
+existing. So the idea is to let the user define transactions like before, but changing the semantics of 
+\code{readTVar} that it is evaluated in the commit phase. The user is able to define transactions like with 
+the original implementation, but the delay of the evaluation shortens the time TVar are critical and thus
+the chance a transaction is rolled back. 
 
 If we refer to our example: 
 \par\noindent
@@ -504,9 +499,9 @@ transaction2 = do
 \end{minipage}
 
 If we change the semantics of \code{readTVar} by delaying the evaluation, the following happens.
-Both transactions will execute the computation phase simultaneously. This means for \code{transaction1} adding
-\code{(acc1,(a1 - 50))} and \code{(acc2,(a2 + 50))} to their writeSet (this is analog for \code{transaction2}).
-At the first glance this seems to be incorrect since the value of \code{a1} and \code{a2} are not yet present.
+Both transactions will execute the computation phase simultaneously. This means \code{transaction1} adds
+\code{(acc1,a1,(a1 - 50))} and \code{(acc2,a2,(a2 + 50))} to its log (this is analog for \code{transaction2}).
+At the first glance this seems to be incorrect since the values of \code{a1} and \code{a2} are not yet present.
 For Haskell this is quite common. Haskells is a non-strict language, which means passing unevaluated expressions
 is normal. 
 
@@ -514,64 +509,48 @@ After the computation phase the commit phase follows. The first step is to lock 
 perform the validation. Since both transactions used the same TVars, they will commit successively instead of
 parallel. 
 
-Assume \code{transaction1} gets the locks first and trys to validate\footnote{You could argue that 
+Assume \code{transaction1} gets the locks first and tries to validate\footnote{You could argue that 
 evaluating \code{readTVar} operation is necessary before validating, but this would not change the validity of the 
 transaction, since the TVars are locked and can not be modified by other transactions at that point.}. 
-Since the readSet is empty the validation is unnecessary; the empty readSet is always valid. 
-Before \code{transaction1} is able to commit its writeSet it needs
-to evaluate \code{a1} and \code{a2}. By doing this the \code{readTVar} operations are evaluated. Hence the 
-TVar and its version number is added to the readSet and the actual value is return. Since the readSet is already 
-validated at this point it is superfluous.
+Since the readSet contains an action whose result is the current value, the validation is unnecessary; it is always valid.
+To validate the log, \code{a} and \code{b} are evaluated. At last the new values are written to the TVars.
 
 After \code{transaction1} finished and released the locks, \code{transaction2} aquires these locks
-and validates. The readSet of \code{transaction2} is also empty, thus the validation succeeds. Then \code{transaction2} 
-evaluates the \code{readTVar} operations and commits its writeSet before releasing the locks.
+and validates. The log of \code{transaction2} is also valid and also commits its changes.
 
-Both transactions run parallel as far as possible and did not roll back. In Chapter \ref{Chapter2}
-are the limitations of this idea presented and the challenges that arise when implementing it.
-Furthermore are solutions to these challenges introduced.
-
+Both transactions run parallel as far as possible and did not roll back. Chapter \ref{Chapter2}
+presents the limitations of this idea and the challenges that arise when implementing it.
 
 \subsection{Unnecessary Recomputations}
-While the first problem dealed with then question \textit{when} transactions should be rolled back,
-the second problem investigates the question \textit{how} transactions are rolled back. Take a look
-at the following example:
+\label{Prob:UnRe} 	
+While the first problem dealed with then question \textit{when} transactions need to be rolled back,
+the second problem investigates the question \textit{how} transactions are rolled back. Lets take a 
+look at our well known example:
 \begin{lstlisting}
-transaction = do 
-  a <- readTVar t1	
-  writeTVar t1 (f a)	
-  b <- readTVar t2	
-  writeTVar t2 (g b)	
+transfer src dst am = do 
+  srcBal <- readTVar src	
+  writeTVar src (srcBal - am)	
+  dstBal <- readTVar dst	
+  writeTVar dst (dstBal + am)	
 \end{lstlisting}
 This transaction contains two independent statements. The first two lines of the transacton form the first 
 statement. This is independent of the last two lines. Independent means their side effects or results do not 
 influence each other. While the first line influces the second line, it does not influence the last two lines
 and vice versa. 
 
-If the transaction is now executed it computes its writeSet and readSet first. Then it locks the TVars and 
-validates. The validation fails if either of the TVar has changed after it was read by the transaction.
-If the validation fails the transcation is rolled back. Which means the readSet and writeSet are discarded,
+If the transaction is executed, it computes its log first. Then it locks the TVars and 
+validates\footnote{We want study the two problems independently and thus assume the original implementation here.}. 
+The validation fails if either of the TVar has changed after it was read by the transaction.
+If the validation fails the transcation is rolled back. Which means the log is discarded,
 regardless which TVar was the reason for the failed validation. 
 
-For example if \code{t1} was modified after the transaction read it, the transaction is rolled back and both 
-statements are executed again. This includes the read and write of \code{t2} although the value of 
-\code{t2} did not change. Hence the exact same code with same inputs and the same (relevant) environment is 
-executed twice. If we are able to invalidate parts of transactions instead of transactions as a whole, 
-we can save time when rolling back a transaction.  
-In the previous example we can use the information that only \code{t1} changed. If we roll back this 
-transaction, we onky need to execute the first two actions, because the last two actions do not depend 
-on \code{t1}.
-
-% Some may argue it is not common to execute independent statements in a single transaction. However, I do not want  
-% the performance of the STM library to rely on the capabilities of the programmer. 
-% Furthermore do I not want to make any asssumption on how the library is most likely be used. 
-% I am not sure if there
-% are cases in which the execution of independent statements is needed, but I do not want the user to think 
-% about this issue. The user should focus on the correctness of the code; the performance is the task of the
-% library. 
-
-% TODO: this technique may even be used for dependent statements aswell by reexecuting just tails of a dependence
-% chain instead of the whole dependent chains
+Suppose a \code{transaction1} executes \code{transfer acc1 acc2 5} and is deschedules before committing.
+Then \code{transaction2} modifies \code{acc1} (and nothing else) and commits. This would cause \code{transaction1}
+to roll back and execute both parts of \code{transfer} again. This includes the read and write of \code{t2}, although 
+the \code{t2} was not modified. Hence the exact same code with same inputs and the same (relevant) environment 
+is executed twice. If we just execute the parts of a transaction that are invalid instead of all, we can save a 
+considerable amount of time when a transaction is rolled back. This means for the exmple, it is enough to remove 
+the entry for \code{acc1} from the log an execute the first two actions of transfer instead of all actions.
 
 This concludes the overview on the problems of the current STM implementation. We will now turn over to the 
 solution for this problems.

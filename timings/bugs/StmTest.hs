@@ -39,6 +39,8 @@ main = do args <- getArgs
                                            performM iter ts 
                                            atomically $ readTVar sync >>= (writeTVar sync).(subtract 1))
           atomically $ waitZero sync
+          val <- readMVar rollbacks
+          putStrLn $ "Rollbacks: " ++ show val
           vs <- atomically $ T.sequenceA $ map readTVar ts
           print $ sum vs
          
