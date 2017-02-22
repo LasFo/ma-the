@@ -6,8 +6,8 @@
 \section{Software Transactional Memory}
 \label{STMInterface}
 Software Transactional Memory (STM in the following) is a programming language independent synchronization concept. Today STM is available 
-in all common programming languages\footnote{Even though STM is language independent, I will present the STM library in Haskell since this thesis is
-about STM in Haskell}. To understand the benefits of STM, take a look at the following example:
+in all common programming languages. Since the subject of this thesis is Haskell, we will not investigate STM in general.
+To understand the benefits of STM, take a look at the following example:
 \begin{lstlisting}
 type Account = MVar Int
 
@@ -53,11 +53,11 @@ transfer src dst am = do
   putMVar dst (dstBal + am)
 \end{lstlisting}
 This indeed solves the problem regarding the deadlock. In return we lose consistency. For a brief moment we see an inconsistent state. Since
-the amount is allready subtracted from one account, but not yet added to the other account. This inconsistent state is observable by other 
+the amount is allready withdrawn from one account, but not yet deposited on the other account. This inconsistent state is observable by other 
 threads. This is not possible in the first implementation. 
 
-We can use STM to avoid these problems. STM provides a single element buffer named \code{TVar}. A TVar always holds an value and is never 
-empty. TVars are read and written with the functions \code{readTVar} and \code{writeTVar}, respectively. 
+We can use STM to avoid both of these problems. STM provides a single element buffer named \code{TVar}. In contrast to an MVar, a 
+TVar always holds a value and is never empty. TVars are read and written with the functions \code{readTVar} and \code{writeTVar}, respectively. 
 In contrast to \code{putMVar} and \code{takeMVar}, the TVar operations are not \code{IO} actions but \code{STM} action\footnote{If 
 you are wondering when I use \code{SMT} and when STM. I use \code{STM} when I refer to the Haskell type constructor and STM when I refer to STM as library}. 
 \code{STM} is an instance of Monad, hence multiple \code{STM} actions can be combined
@@ -75,8 +75,8 @@ transfer src dst am = do
 Note the type of transfer is no longer an \code{IO} action, but an \code{STM} action. Apart from this the code looks
 similar to the MVar version.
 
-In order to execute a transaction the function \code{atomically :: STM a -> IO a} is used. 
-Since \code{readTVar} and \code{writeTVar} do not lock the TVar, the following example contains no deadlock:
+In order to execute an STM action (called transaction in the following) the function \code{atomically :: STM a -> IO a} is used. 
+The following example contains no deadlock, because \code{readTVar} and \code{writeTVar} do not lock the TVar:
 \par\noindent
 \begin{minipage}[t]{.45\textwidth}
 Thread 1:
@@ -100,13 +100,16 @@ This is because STM ensures the \keyword{ACID} properties. The ACID properties w
 database transactions. These properties were adapted for software transactions later on.
 In the case of software transactions the ACID properties mean the following:
 \begin{itemize}
- \item \keyword{Atomicity}: the transaction executes all operations or none.
+ \item \keyword{Atomicity}: all operations of the transaction are executed or none.
  \item \keyword{Consistency}: all modifications of a transaction are committed at the same time. No transition state is observable.
- \item \keyword{Isolation}: no concurrency is observable by a transaction. Each transaction can work as if it is the only transaction.
- \item \keyword{Durability}: ensures the perseverance of the changes. In the case of software transactions this is not necessary.
+ \item \keyword{Isolation}: no concurrency is observable by any transaction. transactions do not influence each other indirectly.
+ \item \keyword{Durability}: ensures the perseverance of the changes.
 \end{itemize}
+In the case of software transactions the \keyword{Durability} is not demanden, which is why we will refer to the ACI properties
+in the rest of the thesis.
+
 These properties explain the name \code{atomically}, because the enclosed code appears to be executed instantaneously without any 
-interactions with other threads.
+interactions with other transactions.
 Before we turn over to the implementation of STM, we take a deeper look at the interface of the STM.
 
 \code{newTVar :: a -> STM (TVar a)} creates a newTVar. Since a TVar always holds a value, an initial value has to be
@@ -121,13 +124,13 @@ With \code{orElse :: STM a $\rightarrow$ STM a $\rightarrow$ STM a} you are able
 and ignores the second transaction, if the first transaction is successful. If the first transaction fails (retries), the second transaction is 
 executed instead.
 
-Note that it is not possible to execute \code{IO} action within a transaction, which means that not side effects can occur. Furthermore this means
+Note that it is not possible to execute \code{IO} action within a transaction, which means that no side effects can occur. Furthermore this means
 restarting a transaction will never lead to the re-execution of irreversible operations. The reason is that the computations of transactions
 are done within the \code{STM} Monad. In other words the type system of Haskell forces us to write correct transactions. 
-
+ 
 For single threaded programming, abstraction and composability are key features. These features allow us to combine smaller pieces
-of code into more complex pieces of code. These feature are not available for lock based concurrent programming. Compose correct lock based
-concurrent functions most likely lead to deadlocks or inconsistencies. Consider the following example:
+of code into more complex pieces of code. These feature are not available for lock based concurrent programming. Composing correct lock based
+concurrent functions often leads to deadlocks or inconsistencies. Consider the following example:
 \begin{lstlisting}
 withdraw :: Account -> Int -> IO()
 withdraw acc am = do 
@@ -147,8 +150,8 @@ transfer src dst am = do
 We reuse the functions that are already defined instead of coding everything from the scratch. In our example this is equivalent 
 to the solution suggested above to eliminate the deadlock. This implementation is free of deadlocks, but it lacks consistency.
 Thus building complex concurrent operations can not take advantage of abstraction and composability. We always need to code
-everything from the scratch. This is error prone in compared to the step wise combination of smaller operations into 
-bigger operations.
+everything from the scratch. This is error prone in comparison to the step wise combination of smaller operations into 
+more complex operations.
 
 STM allows us to use this important programming paradigm for concurrent programming. Thus the following example provides
 deadlock freedom as well as consistency.
@@ -168,17 +171,26 @@ transfer src dst am = do
 \end{lstlisting}
 We can combine arbitrary transactions to more complex transactions while preserving the ACI properties. This greatly benefits the 
 readability of the code. In addition it increases the efficiency of the development process, because we are able to reuse code
-that we already found to be correct. This was also one of the main motivations of paper \parencite{STMBase} which forms the foundation
-of STM in Haskell.
+that was already found to be correct. This was also one of the main motivations of the paper \parencite{STMBase} which forms the foundation
+of STM in Haskell. 
 
+The reason this works is because always the whole transaction (\code{STM} action) is considered as one block for which
+the ACI properties must hold. Thus the user marks the critical section by defining them as one transaction and the 
+library ensures the correctness and deadlock freedom. The user only needs to think about which actions need to be 
+processed together. This is comparable to a lock based version with a single lock\footnote{For now we assume that 
+if the user tries to acquire the lock, when he already it, it is a NOOP.}. Everytime the user wants to process a 
+critical section he takes the lock before this section and releases the lock afterwards. Then the critical section 
+are processed isolated and problem such as race conditions and lost updates does not occur. The performance on the
+other hand is devestating and does not scale well, because all critical sections are sequentialized. This is for
+most modern systems not acceptable, thus this solution is not feasible.
   
 \section{Implementation}
-In this we explore the current implementation of STM in Haskell, more specific in GHC. For a detailed description of the implementation 
+In this section we explore the current implementation of STM in Haskell, more specific in GHC. For a detailed description of the implementation 
 refer to \url{https://ghc.haskell.org/trac/ghc/wiki/Commentary/Rts/STM}. 
 
 Even though the current implementation uses a low level C-library, we retain an abstract view on the implementation, since the technical 
-details are not important for the course of this thesis. An abstract view on the implementation is presented to understand how the ACI 
-properties are ensured.
+details are not important for the course of this thesis. The implementation is outlined to understand how the ACI 
+properties are guaranteed.
 
 The execution of a transaction (a call of \code{atomically}) is split in two phases. First the computation phase and second the commit phase. 
  
@@ -191,20 +203,23 @@ Each transaction holds a log for the TVars it has accessed. The log contains fou
  \item versionNumber
 \end{itemize}
 The \code{versionNumber} is only used to prevent a very subtle bug and thus not considered in this thesis. 
-The log is extenden and modified by the transactional operations \code{writeTVar} and \code{readTVar}. \code{newTVar} on 
+The log is extended and modified by the transactional operations \code{writeTVar} and \code{readTVar}. \code{newTVar} on 
 the other hand creates the new TVar directly. Whenever \code{readTVar} is called the associated TVar is lookep up in the log.
-If it is present, the \code{newValue} is returned. If it is not present, a new entry for the log is created. While \code{tvar}
+If it is present, the \code{newValue} is returned. If it is not present, a new entry in the log is created. While \code{tvar}
 is the passed TVar, \code{newValue} and \code{expectedValue} are the actual value of the TVar and \code{versionNumber} is 
 the actual verison number.
-This is the one of the two times in the computation phase when the transaction accesses the actual mutable data structures.  
+This is one of the two times in the computation phase when the transaction accesses the actual mutable data structures.  
 After the entry is created and added to the log, the actual value is returned. 
 
 A call of \code{writeTVar} also looks up the associated TVar in the log. If it is present, the field \code{newValue} is 
 set to the value passed to writeTVar. If it is not present, a new entry is created. The \code{tvar} is the passed TVar and
 the \code{newValue} is the passed value and \code{expectedValue} is the actual value of that TVar. This is the other time 
-the actual mutable data structures are accessed in the computation phase. 
+the actual mutable data structures are accessed in the computation phase. To enter the actucal value of the TVar at this
+point is not needed to preserve the ACI properties. This is done to simplify the implementation at the risk of an additional
+rollback. On the other hand it is unusual to write a TVar that was not read before, because this means to overwrite the 
+value of a TVar and thus discarding the initial content of that TVar.
 
-This log fulfills two purposes. One purpose of the log is the use in the commit phase which is described in \ref{Sec:STMImpl}.
+This log fulfills two purposes. One purpose of the log is the use in the commit phase which is described in Section \ref{Sec:STMImplCommit}.
 The other is the interaction between \code{readTVar} and \code{writeTVar}. The \code{readTVar} operations are able to see the results 
 of preceding \code{writeTVar} operations in the log. Without the log \code{writeTVar} would need to access the actual TVar. This on the 
 other hand would imply that other transactions would be able to see inconsistent intermediate states of the system;
@@ -217,7 +232,7 @@ the design concept of Haskell. The second reason is one of the core motivations 
 With the restriction it is not possible to combine arbitrary correct STM functions to new more complex STM
 functions. 
 
-Take a look at the following example:
+To understand how a log could look like, take a look at the following example:
 \begin{lstlisting}
 transaction = do
   a <- readTVar t1
@@ -226,16 +241,17 @@ transaction = do
   writeTVar t2 a
 \end{lstlisting}
 This code would lead to the following log:
-\begin{lstlisting}
- log  = {(t1,a,b),(t2,b,a)}
+\begin{lstlisting}[language=C]
+ log  = {(t1,a,b),(t2,b,a)} 
 \end{lstlisting}
-The log contains two entries, because the transaction accessed two TVars. The first entry contains the information that \code{t1}
-hold the value \code{a} when it was first read and the value \code{b} is the new value of it. \code{t2} hold the value \code{b} 
+The log contains two entries, because the transaction accessed two TVars. The first part of the entry denotes the TVar, the second
+part the expected value and the last part is the new value. The first entry contains the information that \code{t1}
+held the value \code{a} when it was first read and the value \code{b} is the new value of it. \code{t2} held the value \code{b} 
 and the new value is \code{a}. Before we will examine the commit phase, we will look at the other operations of the STM interface.
 
 \code{newTVar} creates a new TVar and initializes this TVar. Afterwards this TVar can be used like already existing TVars.
 Even if the transaction is rolled back, the new created TVars are not deleted explicitly. This work is done by the garbage
-collector, since the TVars are not further referenced, if the transaction that created them is rolled back. 
+collector, since the TVars are not further referenced. 
 
 \code{retry} aborts the computation and returns a results that indicates a failure. This result may be intercepted by 
 \code{orElse} or is passed to \code{atomically} directly. 
@@ -251,7 +267,7 @@ this queue. The committing thread then notifies all waiting threads.
 \code{orElse} on the other hand reacts differently on the the result that indicates a failure. The implementation works with nested transactions, 
 but to explain this in detail would go beyond the scope of this thesis. Nested transactions are not able to publish their writes on their own.
 When a nested transaction successfully commits(we see in the next section what this means), its log is integrated in the log of the surrounding transaction. 
-Integrated means the logs are merged and in the case one entry is in both log the entry of the outer transaction is discarded.
+Integrated means the logs are merged and in the case that there is a entry in both logs for one TVar, the entry of the outer transaction is discarded.
 If the nested transaction fails, because \code{retry} occurred and it is the first transaction of \code{orElse}, the log of the inner transaction
 is integrated in the log of the surrounding transaction, but the \code{newValue} fields of the inner log are ignored. If the nested transaction
 fails to validate the outermost transaction is rolled back.
@@ -266,9 +282,9 @@ In conclusion the interface functions of STM are processed in the computation ph
 \end{itemize}
 
 \subsection{Commit Phase}
-\label{Sec:STMImpl}
+\label{Sec:STMImplCommit}
 After the log is calculated and no further STM actions need to be processed, the commit phase starts.
-At first the transaction validates if the values in its log are still correct by \keyword{validating} its log.
+At first the transaction checks if the values in its log are still correct by \keyword{validating} its log.
 Validation denotes the process to check if the expectedValues are equal to the actual values in the TVars.
 In other words for each entry in the log the transaction reads the actual TVar and compares the value with 
 the \code{expectedValue} in the log. If at least one of these values does not match, the transaction is considered
