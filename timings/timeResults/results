@@ -17,4 +17,7 @@ Master.STMWSL2                 5.0684                         7.5828            
 
 
 
-GHC.STM no noticable jitter in execution time
+Scaling1 is performed with x in {1..50}, StmTest(x,1000,50,20) and 25 iterations
+   and with x in {51..75} StmTest(x,1000,50,20) and 15 iterations
+Scaling2 is performed with x in {1..75}, PerformanceTest(x,1000,50,5,5) and 10 iterations
+

@@ -3,6 +3,10 @@ import System.Environment
 import Control.Concurrent
 --import Control.Concurrent.STM
 import STMP
+--import STMLA
+--import STMWSL1
+--import STMWSL2
+
 
 import qualified Data.Traversable as T
 import System.Random
@@ -26,19 +30,21 @@ import Data.List
 --namely: threads * iter * changes.
 --Otherwhise the result may vary or the test case deadlocks.
 
---threads = 20
+threads = 50
 iter    = 1000
 tvars   = 50 
-changes = 20
+--changes = 30
 
 main = do args <- getArgs
-          let threads = read . head $ args
+          let changes = read . head $ args
           sync <- atomically $ newTVar threads 
           ts <- atomically $ T.sequenceA $ replicate tvars (newTVar 0)
-          sequence $ replicate threads (forkIO $ do
-                                           performM iter ts 
-                                           atomically $ readTVar sync >>= (writeTVar sync).(subtract 1))
+          mapM_ (uncurry forkOn) $ zip (concat (repeat [1..4] ))
+                                       (replicate threads (performM iter ts changes >>
+                                        (atomically $ readTVar sync >>= (writeTVar sync).(subtract 1))))
           atomically $ waitZero sync
+          --val <- readMVar rollbacks
+          --putStrLn $ "Rollbacks: " ++ show val
           vs <- atomically $ T.sequenceA $ map readTVar ts
           print $ sum vs
          
@@ -49,14 +55,14 @@ waitZero tvar = do
     then retry
     else return ()
     
-performM :: Int -> [TVar Int] -> IO ()
-performM 0 _ = return ()
-performM n tvs = do
+performM :: Int -> [TVar Int] -> Int -> IO ()
+performM 0 _ _ = return ()
+performM n tvs changes = do
   positions <- sequence (replicate changes $ randomRIO (0,tvars-1))
   atomically $ do 
       let tvs'   = map (tvs!!) positions
           fun tv = fmap (+1) (readTVar tv) >>= writeTVar tv 
       mapM_ fun tvs'
-  performM (n-1) tvs
+  performM (n-1) tvs changes
 
 

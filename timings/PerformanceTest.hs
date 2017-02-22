@@ -10,16 +10,18 @@ import Data.Maybe (fromJust)
 --import STMLA
 --import STMWSL1
 import STMWSL2
+import System.Environment
 
 
-
-threads     = 10
-iterations  = 2000
-tvars       = 20
+--threads     = 10
+iterations  = 1000
+tvars       = 50
 rWRatio     = 5
 writes      = 5
 
 main = do
+  list <- getArgs
+  let threads = read $ head list
   sync <- atomically $ newTVar threads
   ts <- atomically $ sequence $ replicate tvars (newTVar 5)
   let tList = zip [1..] ts

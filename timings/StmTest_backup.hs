@@ -2,7 +2,7 @@
 import System.Environment
 import Control.Concurrent
 --import Control.Concurrent.STM
-import STMWSL1
+import STMP
 
 import qualified Data.Traversable as T
 import System.Random
@@ -29,18 +29,16 @@ import Data.List
 --threads = 20
 iter    = 1000
 tvars   = 50 
-changes = 30
+changes = 20
 
 main = do args <- getArgs
           let threads = read . head $ args
           sync <- atomically $ newTVar threads 
           ts <- atomically $ T.sequenceA $ replicate tvars (newTVar 0)
-          mapM_ (uncurry forkOn) $ zip (concat (repeat [1..4] ))
-                                       (replicate threads (performM iter ts >>
-                                        (atomically $ readTVar sync >>= (writeTVar sync).(subtract 1))))
+          sequence $ replicate threads (forkIO $ do
+                                           performM iter ts 
+                                           atomically $ readTVar sync >>= (writeTVar sync).(subtract 1))
           atomically $ waitZero sync
-          val <- readMVar rollbacks
-          putStrLn $ "Rollbacks: " ++ show val
           vs <- atomically $ T.sequenceA $ map readTVar ts
           print $ sum vs
          
