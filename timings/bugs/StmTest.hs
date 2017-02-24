@@ -1,7 +1,7 @@
 
 import System.Environment
 import Control.Concurrent
---import Control.Concurrent.STM
+--import STMP
 import STMWSL1
 
 import qualified Data.Traversable as T

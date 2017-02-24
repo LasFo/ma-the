@@ -133,7 +133,7 @@ newTVar v = STM (\stmState -> do
                     let tVar = TVar newTVarVal id newWaitQ newLock
                     return (Success stmState (return tVar)))
 
-{-# NOINLINE readTVar #-}
+--{-# NOINLINE readTVar #-}
 readTVar :: TVar a -> STM a
 readTVar (TVar mv id waitQ lock) = STM (\stmState -> do
       case IntMap.lookup id (writeSet stmState) of
@@ -153,7 +153,7 @@ readTVar (TVar mv id waitQ lock) = STM (\stmState -> do
                return (Success newState res))
 
 --If the evaluation is demanded before the commit phase, it may lead to non inteded behaviour
-{-# NOINLINE buildVal #-}
+--{-# NOINLINE buildVal #-}
 buildVal :: MVar (IORef a) -> ReadSet -> ID -> MVar [MVar ()] -> Maybe a
 buildVal mv readSet id waitQ = unsafePerformIO $ do 
     {-print "IORead"-}

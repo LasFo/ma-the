@@ -1,23 +1,24 @@
 
 
 
-import Control.Concurrent (forkIO)
 import System.Random
+import Control.Concurrent 
+import Control.Concurrent.MVar
 import qualified Data.IntMap.Strict as IM
 import Data.Maybe (fromJust)
-import Control.Concurrent.STM
+--import Control.Concurrent.STM
 --import STMP
 --import STMLA
---import STMWSL1
+import STMWSL1
 --import STMWSL2
 import System.Environment
 
 
 threads     = 50
 iterations  = 200
-tvars       = 250
-rWRatio     = 20
-writes      = 10
+tvars       = 1000
+rWRatio     = 40
+writes      = 5
 
 main = do
  -- list <- getArgs
@@ -30,6 +31,8 @@ main = do
            perform iterations intmap
            atomically $ readTVar sync >>= (writeTVar sync) . (subtract 1))
   atomically $ waitZero sync
+  vak <- readMVar rollbacks
+  putStrLn $ "Rollbacks: " ++ show vak
   --putStrLn "finished" 
 
 waitZero :: TVar Int -> STM ()

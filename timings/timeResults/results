@@ -20,4 +20,8 @@ Master.STMWSL2                 5.0684                         7.5828            
 Scaling1 is performed with x in {1..50}, StmTest(x,1000,50,20) and 25 iterations
    and with x in {51..75} StmTest(x,1000,50,20) and 15 iterations
 Scaling2 is performed with x in {1..75}, PerformanceTest(x,1000,50,5,5) and 10 iterations
+Scaling3 is performed with x in {1..50}, StmTest(50,1000,50,x) and 15 iterations
+
+the transactions need to be sufficient expensive to gain an advantage from
+my new implementation
 
