@@ -290,12 +290,8 @@ write :: IntMap.IntMap (Maybe (), Maybe (),MVar(IORef ())) ->
          IO (IO (),IO (),Bool)
 write ws rs = do
     (writes, locks) <- readWS (IntMap.toList ws) 
-    tmp <- mapM (\(tv,id) -> do a <- takeMVar tv 
-                                let reset = putMVar tv a
-                                    valid = maybe True ((a ==) . sel1) (IntMap.lookup id rs)
-                                return (reset,valid)) locks 
-    let (unlocks,valids) = unzip tmp
-    return (writes,sequence_ unlocks, and valids)
+    (unlocks,valids) <- process locks (IntMap.toList rs)
+    return (writes, unlocks, valids)
   where replace mv val = do ioRef <- newIORef val
                            -- takeMVar mv
                             putMVar mv ioRef

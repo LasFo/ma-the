@@ -14,10 +14,10 @@ import System.Environment
 
 
 threads     = 50
-iterations  = 200
-tvars       = 250
-rWRatio     = 20
-writes      = 10
+iterations  = 2000
+tvars       = 20
+rWRatio     = 5
+writes      = 5
 
 main = do
  -- list <- getArgs

@@ -1,6 +1,6 @@
 #!/bin/bash
 ghc -O2 -threaded PerformanceTest.hs
-for j in {5..6}
+for j in {10..11}
 do
 rm testfile
 for i in {1..5}
