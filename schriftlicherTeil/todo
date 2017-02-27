@@ -1,5 +1,37 @@
-  Concurrency Control????
-why is STM cool in Haskell and in other languages not that cool
-  Strong vs Weak Isolation
+Introduction
+  why is STM cool in Haskell and in other languages not that cool
+    Strong vs Weak Isolation
 
-conventions such as t1,t2 are tvars and a,b are values
+  conventions such as t1,t2 are tvars and a,b are values
+
+Implementation
+  Vorwort basierend of Franks impl wurde das project implementiert
+  und darauf basierend die master arbeit.
+
+  STM types
+    Stm Result
+    TVar 
+    ReadSet
+
+  State monad
+    state entries
+    monad implementation
+    
+  ReadTVar evaluation
+    buildVal
+    garbage
+  
+  newTVar
+  readTVar
+  writeTVar
+  atomically
+    validation
+  orElse 
+  retry
+    
+  notes on implementation
+    ordered locking
+    garbage not unique
+    locking prevents reads(another structure than MVar would 
+                           allow further optimizations)
+

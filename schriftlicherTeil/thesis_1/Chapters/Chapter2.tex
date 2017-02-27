@@ -138,8 +138,7 @@ valid the transaction finally executes the remaining \code{readTVar} operation i
 actual TVars and determine return value of the transaction. Then the modifications the transaction 
 performed are committed to actual TVar. This is the reason the \code{readTVar} operations can not 
 be delayed longer. By committing the modifications the old values in the TVar are overwritten. Besides 
-this logical issue there is a additional technical reason presented in Chapter \textbf{REF TO CHAPTER 
-IMPLEMENTATION}.%\ref{Chapter3}
+this logical issue there is a additional technical reason presented in Chapter \ref{Chapter3}.
 Parallel to writing the actual TVar the locks for the TVars are released. The last step of the transaction 
 is to return the result. 
 

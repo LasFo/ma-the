@@ -1,0 +1,18 @@
+% Chapter 3
+
+\chapter{Implementation} % Main chapter title
+
+\label{Chapter3}
+
+We will now look upon the implementation of the aforementioned changes. Unlike to the original
+implementation this is not a C library, but a pure Haskell library. This brings some advantages 
+and one disadvantages. The disadvantage is the performance as discussed in \textbf{REF TO EVALUATION}.
+For the costs of performance we gain a library that is easy to understand and extend. The original 
+implementation is interwoven with the GHC runtime environment. Some STM functions are evoked by 
+the scheduler to ensure the consistency. This makes the library sensitive to changes. 
+To ensure the correctness of such a library is significantly harder than with a pure library, since
+the compiler does not aid this porcess. In other words, the devlopment of a pure library is safer
+and faster. Nevertheless, since the aim of this thesis is to optimize the current implementation,
+it would be nice to have a C library of this implementation for realistic comparison, because 
+the alternative implementation is not yet faster than the original one which we discuss is 
+section \textbf{REF TO EVALUATION}. 
