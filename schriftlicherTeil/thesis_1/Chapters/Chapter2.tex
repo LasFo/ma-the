@@ -142,38 +142,3 @@ this logical issue there is a additional technical reason presented in Chapter \
 Parallel to writing the actual TVar the locks for the TVars are released. The last step of the transaction 
 is to return the result. 
 
-
-\section{lock write is enough}
-
-\subsection{MOVE THIS TO THE IMPLEMENTATION CHAPTER}
-When the commit phase begins the transaction is validated. The validation does not differ from the validation 
-in the original implementation. When a \code{readTVar} is evaluated the current value of the TVar is logged. 
-Validating the transactions means to check if the logged values match the current values of the TVars. 
-If the transaction is not valid, it is rolled back.
-If the transaction is valid, the TVars that the transaction want to modify are locked and the transactions is validated again. 
-This is needed, because it is possible that a TVar in the log was modified after the validation and before 
-the lock was acquired. This seems to be an unnecessary overhead, but has a slightly better performance than first 
-locking and then validating. This is discussed in Chapter\textbf{REF TO EVALUATION}. The original implementation 
-also uses this scheme, which was proposed by Fraser \parencite[Page 42]{lockfreedom}. The reason is
-the cost for locking the TVars. This locking itself is not particular expensive, but it hinders parallelism.
-Everytime a TVar is locked no other transaction is able to read, lock, or validate this TVar. Additionally if 
-a TVar tries to access a locked TVar, it is suspended and a context switch follows. Context switches in Haskell 
-are not as expensive as context switches of OS threads, but it schould not be neglected, especially when dealing
-with a large number of threads. Validation is a operation, which needs two memory access per entry in the log.
-One memory access is the access to the log entry to look up the expected value and the other memory access is
-the access to the actual TVar\footnote{The log entry needs to be accessed two times. First to get the expected
-value and second to get the next entry, because the log is a dynamic structure and thus needs a pointer
-to the next entry comparable to a list. Nevertheless the entry itself is (most likely) in one block in the memory.
-This is why I consider one memory access to be enough for the entry.}. This is reasonable considering that the 
-log only consists of TVars that are needed to determine the control flow. So validation is significant faster
-than locking. 
-
-% After the locks has been acquired and the log was validated, the remaining \code{readTVar} operations are evaluated.
-
-At this point no other transaction is able to modify the TVars and thus the evaluation is safe in the sense
-that the value cannot change until the commit of the transaction is completed. After the reads are evaluated the 
-writes are processed and the result is returned after unlocking the TVars.
-
-%TODO example
-
-

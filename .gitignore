@@ -2,6 +2,7 @@ crap/*
 *.o
 *.hi
 treffen
+testfile
 *.aux
 *.tex.backup
 *.bbl
