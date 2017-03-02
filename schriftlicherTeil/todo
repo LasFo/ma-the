@@ -18,20 +18,22 @@ Implementation
     monad implementation
     
   ReadTVar evaluation
-    buildVal
     garbage
   
   newTVar
+  buildVal
   readTVar
   writeTVar
   atomically
     validation
   orElse 
   retry
+  Monad
     
   notes on implementation
     ordered locking
-    garbage not unique
     locking prevents reads(another structure than MVar would 
                            allow further optimizations)
 
+Future Work
+  globalCount overflow
