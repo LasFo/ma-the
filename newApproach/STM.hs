@@ -44,11 +44,7 @@ instance Applicative STM where
          Success newState val1 -> do
             res2 <- t2 newState 
             case res2 of
-              Success interimState val2 -> do
-                   --make sure the unsafePerformIO actions are processed as intended
-                   --not logging the internal action would lead to blackholes 
-                   let finState = interimState{uEReads = [unsafeCoerce val1,unsafeCoerce val2] 
-                                                         ++ uEReads interimState}
+              Success finState val2 -> do
                    return (Success finState (val2 <*> val1))
               Retry finState -> return $ Retry finState
               InValid -> return InValid
@@ -93,8 +89,7 @@ eval (STM stm) = STM (\state -> do
       InValid -> return (InValid))
 -}
 
-data StmState = TST {touchedTVars  :: IntMap.IntMap (MVar ()),
-                        -- (oldValue, newValue, MVar to write)
+data StmState = TST { --(oldValue, newValue, MVar to write)
                      writeSet      :: IntMap.IntMap (Maybe (),Maybe (),MVar (IORef ())), 
                      notifys       :: IO (),
                      readSet       :: ReadSet,
@@ -109,8 +104,7 @@ initialState :: IO StmState
 initialState = do
   rMVar <- newEmptyMVar 
   rs <- newIORef IntMap.empty
-  return (TST {touchedTVars  = IntMap.empty,
-               writeSet      = IntMap.empty,
+  return (TST {writeSet      = IntMap.empty,
                notifys       = return (),
                readSet       = rs,
                retryMVar     = rMVar,
@@ -120,7 +114,6 @@ initialState = do
 data TVar a = TVar (MVar (IORef a))   
                    ID               
                    (MVar [MVar ()])  
-                   (MVar ())
 
 newTVar   :: a -> STM (TVar a)
 newTVar v = STM (\stmState -> do
@@ -128,23 +121,18 @@ newTVar v = STM (\stmState -> do
                     ioRef <- newIORef v
                     newTVarVal <- newMVar ioRef
                     newWaitQ <- newMVar []
-                    newLock <- newMVar ()
-                    let tVar = TVar newTVarVal id newWaitQ newLock
+                    let tVar = TVar newTVarVal id newWaitQ
                     return (Success stmState (return tVar)))
 
 {-# NOINLINE readTVar #-}
 readTVar :: TVar a -> STM a
-readTVar (TVar mv id waitQ lock) = STM (\stmState -> do
+readTVar (TVar mv id waitQ) = STM (\stmState -> do
       case IntMap.lookup id (writeSet stmState) of
              Just (v,_write,_ioRef) ->
                return (Success stmState (unsafeCoerce v))
              Nothing -> do
                let res = buildVal mv (readSet stmState) id waitQ
-                   newState = stmState{touchedTVars = case IntMap.lookup id (touchedTVars stmState) of
-                                                        Just _  -> touchedTVars stmState
-                                                        Nothing -> IntMap.insert id lock
-                                                                           (touchedTVars stmState),
-                                       uEReads = unsafeCoerce res : uEReads stmState,
+                   newState = stmState{uEReads = unsafeCoerce res : uEReads stmState,
                                        --entering the value in the writeSet prevents the transaction
                                        --to read a TVar multiple times on IO level
                                        writeSet = IntMap.insert id 
@@ -168,16 +156,12 @@ check False = retry
 
 --The value needs to be a STM action to be able to extract the waitQs it depends on 
 writeTVar :: TVar a -> a -> STM ()
-writeTVar (TVar ioRef id waitQ lock) val  = STM (\stmState -> do
+writeTVar (TVar ioRef id waitQ) val  = STM (\stmState -> do
                  let val' = Just val
                      newState =
-                      stmState{touchedTVars = case IntMap.lookup id (touchedTVars stmState) of
-                                                Just _a -> touchedTVars stmState
-                                                Nothing ->  IntMap.insert id lock
-                                                                   (touchedTVars stmState),
-                               writeSet = IntMap.insert id 
-                                              (unsafeCoerce val', unsafeCoerce val', unsafeCoerce ioRef)
-                                              (writeSet stmState),
+                      stmState{writeSet = IntMap.insert id 
+                                            (unsafeCoerce val', unsafeCoerce val', unsafeCoerce ioRef)
+                                            (writeSet stmState),
                                notifys = notifys stmState >> fNotify waitQ} 
                  return (Success newState (return ())))
 
@@ -185,48 +169,44 @@ writeTVar (TVar ioRef id waitQ lock) val  = STM (\stmState -> do
 atomically :: STM a -> IO a
 atomically stmAction = do
   iState <- initialState 
-  atomically' stmAction iState
+  atomically' iState
   where
-    restart state stmAction = do 
+    restart state = do 
           newRs <- newIORef IntMap.empty
           let reState = state{readSet   = newRs}
-          atomically' stmAction reState
-    atomically' :: STM a -> StmState -> IO a
-    atomically' stmAction state = do
+          atomically' reState
+    atomically' state = do
       stmResult <- startSTM stmAction state
       case stmResult of
         Retry newState -> do 
-          unlocker <- mapM io $ IntMap.elems (touchedTVars newState)
           rSet <- readIORef $ readSet newState
           let rList = IntMap.elems rSet
           valid <- validate rList
           when valid (do let observes = map sel3 rList
                          enter observes (retryMVar newState) 
-                         sequence_ unlocker
-                         takeMVar (retryMVar newState)
+                         valid <- validate rList 
+                         when valid $ takeMVar (retryMVar newState)
                          unsub (retryMVar newState) observes)
-          when (not valid) (sequence_ unlocker)
-          restart state stmAction
+          restart state
         InValid -> do
-          restart state stmAction
+          restart state
         Success newState res -> do 
           rSet <- readIORef $ readSet newState 
           valid <- validate $ IntMap.elems rSet
           if valid
             then do
               mapM_ (flip seq (return ())) (uEReads newState)
-              result <- seq res (return (fromJust res))
               rSet <- readIORef $ readSet newState
               (writer,unlocks,valids) <- write (writeSet newState) rSet
               val <- validate $ IntMap.elems $ IntMap.difference rSet (writeSet newState)
               if val && valids
                  then do notifys newState
                          writer
-                         return result
+                         return (fromJust res)
                  else do unlocks
-                         restart state stmAction
+                         restart state
             else do
-              restart state stmAction
+              restart state
 
 retry  :: STM a
 retry =
@@ -238,7 +218,7 @@ orElse (STM stm1) (STM stm2) =
   STM (\stmState -> do
            stm1Res <- stm1 stmState
            case stm1Res of
-             Retry newState -> stm2 stmState{touchedTVars = touchedTVars newState}
+             Retry newState -> stm2 stmState
              _              -> return stm1Res)
 
 -------------------
@@ -268,12 +248,8 @@ write :: IntMap.IntMap (Maybe (), Maybe (),MVar(IORef ())) ->
          IO (IO (),IO (),Bool)
 write ws rs = do
     (writes, locks) <- readWS (IntMap.toList ws) 
-    tmp <- mapM (\(tv,id) -> do a <- takeMVar tv 
-                                let reset = putMVar tv a
-                                    valid = maybe True ((a ==) . sel1) (IntMap.lookup id rs)
-                                return (reset,valid)) locks 
-    let (unlocks,valids) = unzip tmp
-    return (writes,sequence_ unlocks, and valids)
+    (unlocks,valids) <- process locks (IntMap.toList rs)
+    return (writes, unlocks, valids)
   where replace mv val = do ioRef <- newIORef val
                             putMVar mv ioRef
         readWS []                             = return (return (),[])
@@ -332,4 +308,4 @@ fNotify waitQ = do
   queue <- takeMVar waitQ
   mapM_ (flip tryPutMVar ()) queue 
   putMVar waitQ []
-
+ 
