@@ -1,0 +1,117 @@
+
+\chapter{Evaluation} 
+
+\label{Chapter4}
+In this chapter we elaborate the impact of the implemented changes on the performance.
+Evaluating STM is worth a thesis itself. The biggest advantage of STM in usability is
+its biggest disadvantage in (performance) testing STM. STM is a universial tool. Most
+synchronization problems can be tackled with STM. This on the other hand means there
+is no clear way to test STM, especially when measuring the performance. Thanks to
+the moderate interface, testing the correct behaviour of STM is practicable. Testing 
+is no guarantee that the implementation is correct in all regards, but it narrows the 
+space for bugs. Due to the small interface of STM the complexity is limited. 
+I wrote a number of small tests to test the implementations for specific bugs. Even if 
+tests are no guarantee that the implementations are free of bugs, they test a braod portion
+of the functionality and reduce the space for bugs. However, we will not investigate these 
+correctness tests.
+
+
+Unfortunately, testing the performance is extremely difficult. There are unlimited 
+possibilities to use STM. Thus it is not possible to test the performance in general.
+We can only test the performance for specific cases. This makes it hard to say which 
+implementation has the best performance in general. To be able to classify the differnt 
+tests and to compare the differnt test to each other, we use the following properties: 
+\begin{itemize}
+ \item costs of a transaction
+ \item level of currency
+ \item number of branch dependend TVars 
+\end{itemize}
+The \keyword{costs} of a transaction denotes the time the transaction needs to execute when no 
+other transaction is present.  
+It is important to distinguish this from the time the transaction needs to execute. The
+time heavily depends on other transactions. When a transaction is executed in a system
+with many other transaction that work on the same TVars, the chance that it is rolled 
+back is higher than if the transaction is the only transaction in the system. In contrast, the costs
+of the transaction does not depend on the level of concurrency.
+
+The \keyword{level of concurrency} denote the density of the TVar usage. A high level of 
+concurrency is givin if there are many transactions and if these transactions write and read the same
+TVars. Read-only TVars are not considered, because reading them cannot result in a rollback.
+If every transaction works on different TVars, there is no concurrency at all. If there 
+is only one transaction, there is also no concurrency. Thus only if both requirements are satisfied,
+we speak of a high level of concurrency. 
+
+The last property is relevant only for the alternative implementation. It denotes the amount of TVars that 
+are critical in the new implementation. In the GHC implementation as well as in the implementation
+this thesis is based on, all TVars that are read are critical. In this implementation only TVars the 
+transaction branches on are critical. 
+
+These properties are not statically measurable, because they often depend on the state of the TVars. 
+The cost may vary depending on the branches that are taken. The level of concurrency may also 
+depend on branch conditions, because it determines which TVars are accessed. Furthermore does 
+the scheduler affect the level of concurrency. The GHC runtime system uses the \keyword{round robin}
+scheduling scheme. If all transactions are sufficient cheap, they finish before their time expired.
+This means irrespective of the number of threads, there is no concurrency at all (if a single OS thread
+is used). The number of critical TVar may also depend on the state due to nested branches.
+Nevertheless, we use these vocabulary in the following sections.
+
+\section{Test Setup}
+Before we head over to the results, we will look upon the tests that where used to measure the performance.
+I used basically two tests to compare the different implementations. The frist test is called \keyword{StmTest}.
+It is used to test the performance and the correctness at the same time. StmTest has four parameters to control
+the costs of a transaction and the level of concurrency:
+\begin{itemize}
+ \item threads
+ \item iterations
+ \item tvars
+ \item changes
+\end{itemize}
+\code{threads} determines the number of threads that are working parallel. \code{iterations} is the number of transactions
+each thread executes. \code{tvars} is the number of TVars that are created and used. \code{changes} is the number of 
+operations per transaction. I will use these parameters in the following as variables for numbers.
+The starts by creating \code{tvars} TVars. Then \code{threads} threads are created. Each thread chooses randomly \code{changes} TVars from all 
+created TVars (the same TVar may be chosen multiple times). Then the thread reads each of theses TVars, increments their
+value and writes the new value back to the TVar. This is repeated \code{iter} times. When every forked thread has finished the
+main threads reads all TVars an sums their values. If the STM system is correct, the sum is (\code{threads * iterations * changes}).
+
+By altering the parameters the level of concurrency and the costs per transaction can be controlled. More \code{threads} and less 
+\code{tvars} result in a higher level of concurrency. More \code{changes} mean not only higher costs of a transaction, but also
+a higher level of concurrency. Unfortunately, in this test we are not able to increase the costs per transaction without increasing
+the level of concurrency. The overall runtime of the test can be managed with \code{iterations}. 
+This test clarifies the previously mentioned problem of testing STM. These parameters can arbitrarily chosen and all of the results
+are correct uses of STM. The number of combination on the otherhand is nearly unlimited. Thus it is not possible to compare the 
+implementations with all possible configurations. To determine which STM implementation is the best overall is anything but trivial.
+Nevertheless we use this test to compare the implementation on specific configurations to see their individuel strengths and weaknesses.
+Note that the transactions in this test always write all the TVars they have read. This is not necessarily the case when STM in practise. 
+That is why I created a second Test to meassure the performance.
+
+\keyword{PerformanceTest} is a test to meassure the performance and not the correctness. In contrast to StmTest is has not four but
+five parameters:
+\begin{itemize}
+ \item threads
+ \item iterations
+ \item tvars
+ \item rWRatio
+ \item writes
+\end{itemize}
+The first three parameters are the same as in StmTest. \code{rWRatio} determines the ratio between reads and writes. For example, if
+the \code{rWRation} is \code{5} it means each transaction performs five reads for each write. \code{writes} on the other hands specifies
+the number of writes that are executed in each transaction. This test allows us to increase the costs of the transactions by 
+increasing the level of concurrency only slightly. If multiple transactions read the same TVar there is no conflict. If multiple
+transaction on the other hand read and write the same TVar, there is a conflict. 
+
+PerformanceTest ist similar to StmTest. It first creates \code{tvars} TVars. Then it forks \code{threads} threads. Each of these 
+threads creates ramdomly \code{writes} lists with \code{rWRatio} TVars each. For each inner list the transaction reads all TVars,
+sums their values and writes them back to the first entry of that list. The list of lists is processed in a single transaction. 
+This procedure is repeated \code{iterations} times. Since the TVars are choosen randomly, we cannot determine if the final state
+of the TVars are correct after all threads are finished. Another difference between the two tests is that StmTest uses a list to 
+store and lookup the TVars, while PerformanceTest uses an \code{IntMap}.
+
+To meassure the performance of the implementations the unix \code{time} command was used\footnote{\url{https://en.wikipedia.org/wiki/Time_(Unix)}}.
+The test (either StmTest or PerformanceTest) were compiled with GHC 8.0.1\footnote{\url{https://www.haskell.org/ghc/download_ghc_8_0_1}} and the 
+compiler flags \code{\-O2} for optimizations and \code{-threaded} to allow threaded runtime. The test was exectued with the runtime option \code{-N} 
+to allow multiple (in my case four) OS threads. The tests were executed on a system with an Intel(R) Core(TM) i7-6500U CPU @ 2.50GHz and 
+8GB @ 1600 Mhz DDR3 on a Fedora 25 OS. 
+
+
+\section{Results}

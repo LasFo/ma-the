@@ -6,7 +6,7 @@
 
 We will now look upon the implementation of the aforementioned changes. Unlike to the original
 implementation this is not a C library, but a pure Haskell library. This brings some advantages 
-and one disadvantages. The disadvantage is the performance as discussed in \textbf{REF TO EVALUATION}.
+and one disadvantages. The disadvantage is the performance as discussed in Chapter \ref{Chapter4}.
 For the costs of performance we gain a library that is easy to understand and extend. The original 
 implementation is interwoven with the GHC runtime environment. Some STM functions are evoked by 
 the scheduler to ensure the consistency. This makes the library sensitive to changes. 
@@ -252,8 +252,8 @@ Third, the result is \code{Success newState result}. This is the most interessti
 because it is the commit phase and thus leads not necessarily to a rollback, in contrast to 
 the other two results. 
 There are currently two different implementation as a result of this thesis which 
-only differ in this part. The performance tests presented in \textbf{REF TO EVALUATION}
-provide not a clear result on which implementation is better in general. I will present
+only differ in this part. The performance tests presented in Chapter \ref{Chapter4} do
+not provide a clear result on which implementation is better in general. I will present
 both implementation. When is it not clear which of the implementation we are talking about,
 we will refer to the first implementation as STMLA (STM lock all) and the second STMWSL 
 (STM write set lock). 
@@ -420,7 +420,7 @@ If the transaction is not valid, it is rolled back.
 If the transaction is valid, the TVars that the transaction want to modify are locked and the transactions is validated again. 
 This is needed, because it is possible that a TVar in the log was modified after the validation and before 
 the lock was acquired. This seems to be an unnecessary overhead, but has a slightly better performance than first 
-locking and then validating. This is discussed in Chapter\textbf{REF TO EVALUATION}. The original implementation 
+locking and then validating. This is discussed in Chapter\ref{Chapter4}. The original implementation 
 also uses this scheme, which was proposed by Fraser \parencite[Page 42]{lockfreedom}. The reason is
 the high cost for locking the TVars. This locking itself is not particular expensive, but it hinders parallelism.
 Everytime a TVar is locked no other transaction is able to read, lock, or validate this TVar. Additionally if 

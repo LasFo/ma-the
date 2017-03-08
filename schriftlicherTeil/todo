@@ -35,5 +35,26 @@ Implementation
     locking prevents reads(another structure than MVar would 
                            allow further optimizations)
 
+Evaluation
+  preface
+    Evaluation difficult
+    STM universial tool
+
+  Tests
+    StmTest
+    PerformanceTest
+    Other tests for corretness
+
+  Results
+    Testsettings
+    A result with GHC > STMMasterWSL > STM.MasterLA > STM.Project
+    A result with GHC > STMWSL = STM.Master = STM.Project
+    Scaling
+      If occure, explain livelocks
+
 Future Work
   globalCount overflow
+
+
+Definitions 
+  conflict
