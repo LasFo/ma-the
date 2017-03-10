@@ -5,56 +5,23 @@ Introduction
   conventions such as t1,t2 are tvars and a,b are values
 
 Implementation
-  Vorwort basierend of Franks impl wurde das project implementiert
-  und darauf basierend die master arbeit.
-
-  STM types
-    Stm Result
-    TVar 
-    ReadSet
-
-  State monad
-    state entries
-    monad implementation
-    
-  ReadTVar evaluation
-    garbage
-  
-  newTVar
-  buildVal
-  readTVar
-  writeTVar
-  atomically
-    validation
-  orElse 
-  retry
-  Monad
-    
+  example for every interface action
   notes on implementation
     ordered locking
     locking prevents reads(another structure than MVar would 
                            allow further optimizations)
 
 Evaluation
-  preface
-    Evaluation difficult
-    STM universial tool
-
-  Tests
-    StmTest
-    PerformanceTest
-    Other tests for corretness
-
   Results
-    Testsettings
-    A result with GHC > STMMasterWSL > STM.MasterLA > STM.Project
-    A result with GHC > STMWSL = STM.Master = STM.Project
     Scaling
-      If occure, explain livelocks
+ 
+  Observations
+    No memory leaks observed
 
 Future Work
   globalCount overflow
-
+  STMWSL btter if alternative to MVar is used
 
 Definitions 
   conflict
+  critical

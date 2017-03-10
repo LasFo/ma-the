@@ -115,3 +115,98 @@ to allow multiple (in my case four) OS threads. The tests were executed on a sys
 
 
 \section{Results}
+We will now inspect the results of the performance tests. I performed two series of tests to compare the different implementations.
+In the first series the tests are configured by hand and the level of concurrency as well as the costs per transaction are modified.
+The total workload was the same in all tests in this series. In the second test series the number of threads are increased in every
+test. The workload per thread is unchanged and thus the total workload increases with the number of threads. 
+
+\subsection{First Test Series}
+
+\begin{figure}
+\centering
+ \begin{tabular}[center]{|c|c|c|c|c|}
+  \hline
+	                     & GHC    & Project & STMLA  & STMWSL \\ \hline
+  StmTest(20,1000,200,50)    & 3.2978 &  3.5645 & 3.5340 & 3.6655 \\ \hline
+  StmTest(20,2000,200,25)    & 3.3845 &  3.5700 & 3.6335 & 3.6665 \\ \hline
+  StmTest(20,0500,200,100)   & 3.1780 &  3.8540 & 3.5905 & 3.7910 \\ \hline
+  PerTest(20,500,200,10,10)  & 3.0420 &  3.2830 & 2.9225 & 3.4920 \\ \hline
+  PerTest(20,500,200,20,5)   & 3.0670 &  3.3110 & 2.9425 & 3.4445 \\ \hline
+  PerTest(20,500,200,5,20)   & 3.1520 &  3.4335 & 2.9455 & 3.3500 \\ \hline
+ \end{tabular}
+\caption{Average runtime in seconds for tests with a total workload of 1000000 \code{readTVar} operations.}
+\label{fig:results1}
+\end{figure}
+
+Figure \ref{fig:results1} shows the results of the first test series. The first column contains the test and its configuration.
+StmTest(threads,iterations,tvars,changes) means the StmTestwas applied with the previously explained configuration parameters.
+Same foes for PerformanceTest as PerTest(threads,iterations,tvars,rWRatio,writes). The first row introduces the different 
+implementations. GHC is the current library in GHC 8. Project is the highlevel library that this thesis is based on.
+STMLA and STMWSL are described in the previous chapter. For unknown reasons STMWSL performs poorly in this tests.
+
+In the first three tests we examined how changes in the costs of a transaction effects the runtime of the four systems. 
+The number of threads and TVars are fixed. By altering the \code{changes} parameter, we increase the workload per 
+transaction. To preserve the total workload, we decrease the number of iterations each time we incease the number
+of changes per transaction. In the first test we see that all libraries perform equally good, except for the GHC 
+library, which performs slightly better. In the second test the workload per transaction is halved compared to the
+first test. The runtime of the GHC library and STMLA raises. The GHC library is the fastest and the thesis libraries 
+are the slowest. The third test examines the other direction. The workload per transaction is doubled compared to the 
+first test. This leads to an significant increase in runtime for the Project library and STMWSL. The GHC library becomes 
+faster with this configuration and STMLA remain on a equal level. This is the result we expected, since the rollback of 
+a transaction is more expensive than in the first test. Fortunately does not perform any rollback in this test. The Project
+library on the otherhand performs rollbacks, which explains it increase in runtime. GHCs library also performs rollbacks
+and thus its increase in runtime is only natural. We additionally increase the level of concurrency by increasing the 
+TVars that each transaction accesses, which leads to more rollbacks in the GHC and Project libraries.
+
+The last thress tests use the Performance test. The number of reads per transaction were equal in all tests, but the 
+rWRatio was different. In other words the costs of a transaction is modified slightly, but the level of concurrency
+is modified greatly. By altering the number of read, we increase the costs of a transaction, but more importantly we 
+increase the level of concurrency, because when a transaction writes a TVar another transaction can become invalid.
+Thus, the more TVars each transaction writes the higher in the level of concurrency. The first test executes ten writes
+per transaction and ten reads for each write. The results are positive for the STMLA, since it is the fastest implementation.
+STMWSL is the slowest implementation. The GHC implementation is slighty slower than STMLA but noticeable faster than the 
+Project implementation. If we compare this to the second test, where the number of reads remains the same, but the number of
+writes is halved, no considerable changes are observed. All implementations remain on a similar level compared to the first
+test. If we on the other hand increase the number of writes while retaining the number of reads, the runtime of the
+GHC and Project implementations are increasing. The runtime of STMLA remains the same and is like in the two previous 
+tests the fastest. Interestingly is the runtime of STMWSL lower than before, but still not comparable to the runtime of
+STMLA.
+
+While the results of the first three tests seems not very promising for the need of the alternative implementation, the results
+of the last three tests reveal an application where STMLA outperforms even the GHC implementation, which is an omptimized low 
+level \code{C} implementation. More importantly, these tests met the expectations regarding the costs per transaction. First,
+the performance does not decrease if we increase the costs per transaction. Since we do not execute any rollbacks in these 
+tests, the costs per transaction should not matter for STMLA (and STMWSL). The GHC and Project library on the other hand 
+lose performance in these cases. Second, the performance does not change if we increase the level of concurrency. By increasing
+the level of concurrence the amount of rollback that are executed by the GHC and Project library are increased. STMLA and STMWSL
+on the other hand do not suffer from the increased level of concurrency. 
+An explanation and a possible solution for the poor performance of STMWSL is givin in \textbf{REF TO FUTURE WORK}.
+
+
+\subsection{Second Test Series}
+
+
+
+
+
+
+
+
+\subsection{Observations}
+While executing the tests, I noticed that the runtime option \code{N} that creates multiple OS threads slows down the 
+computation as a whole. The runtime option \code{N} allows the user to specify the number of OS threads by adding a 
+number. I performed some test with runtime options varying \code{N1} to \code{N4} (since the processor contains four 
+physical cores). The results are clear. The more OS thread the test uses the slower is the test. This is unpleasant 
+because it means our efforts to utilize multi-core processors are futile. To avoid confusion, I am not saying that 
+the computation is less efficient; it is slower. For example, one test takes 1.6 second when executed with \code{N1}
+and the \textbf{same} test takes 2.3 seconds when executed with \code{N2} (2.6 with \code{N3} and 3.6 with \code{N4}).
+The test consumed in the case of \code{N1} a singel core to its full extend (100\%). When the test runs with \code{N2}
+it uses two cores, but not to their full extend (around 70\% per core). With \code{N3} it is about 50\% per core and 
+with \code{N4} it is about 45\% per core. The system is not utilized by any other process (expect for the OS) while
+testing. Even though the total amount of CPU cicles increases with the number of OS threads used, the execution time 
+as a whole slows down. I did not take any efforts to explore the reason for this. This is most likely a problem 
+in the runtime systems and thus would go beyond the scope of this thesis. The fact remains that in this kind of
+setup an increase in OS threads a decrease in performance entails. This \textit{kind of setup} is that most of 
+the code is transactional code. A real worlds program is usually not structured like these tests. The portion
+of transactional code is far less. Hence this observation does not necessarily mean that STM is useless in 
+practise. Nevertheless, all tests presented in this section are executed with \code{N4} to allow real parallelism. 

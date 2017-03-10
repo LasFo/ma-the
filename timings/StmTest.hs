@@ -2,10 +2,9 @@
 import System.Environment
 import Control.Concurrent
 --import Control.Concurrent.STM
---import STMP
+import STMP
 --import STMLA
---import STMWSL1
-import STMWSL2
+--import STMWSL
 
 
 import qualified Data.Traversable as T
@@ -30,13 +29,13 @@ import Data.List
 --namely: threads * iter * changes.
 --Otherwhise the result may vary or the test case deadlocks.
 
-threads = 50
-iter    = 1000
+--threads = 20
+iter    = 500
 tvars   = 100 
-changes = 20
+changes = 25
 
-main = do --args <- getArgs
-          --let changes = read . head $ args
+main = do args <- getArgs
+          let threads = read . head $ args
           sync <- atomically $ newTVar threads 
           ts <- atomically $ T.sequenceA $ replicate tvars (newTVar 0)
           mapM_ (uncurry forkOn) $ zip (concat (repeat [1..4] ))
