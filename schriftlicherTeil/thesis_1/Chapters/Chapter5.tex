@@ -1,0 +1,44 @@
+\chapter{Conclusion}
+
+\label{Chapter5}
+
+This chapter contains related work, future work and a summary of the thesis.
+
+\section{Related Work}
+The most important work for Haskell regarding STM is \parencite{STMBase}. This work forms the foundation 
+of the current implementation of STM in GHC. Even if the original implementation was reworked over the 
+last years, its core is still present. This core was described in Chapter \ref{Chapter1}. The modifications
+of the original library were in most cases bug fixes. The only feature that was added to initial
+implementation are \keyword{invariants} \parencite{invariants}. Besides the an implementation sketch
+an a description of the interface, \parencite{STMBase} also offers an formal semantics for STM in Haskell.
+The alternative implementation implements the same interface and aim to fulfill this
+semantics. Even though there is no formal prove that the alternative implementation (and the GHC implementation) 
+suffice these semantics. 
+
+Another approach to optimize STM is presented in \parencite{pessimisticSTM}. The authors propose to 
+use a pessimistic approach comparable to data base transactions. This means each time a shared data structure 
+is accessed it is locked. If the transaction tries to acquire a locked data structure it rolls back. 
+This design avoids shadow copies of values such as the logs in the Haskell implementations. This avoids 
+a memory overhead and more important it avoids the necessity to look up values in the logs. They developed 
+this concept for specific transactions. Most transactions commit successfully and they use far more reads
+than writes. Under these assumptions their implementation performs considerable better than optimistic 
+implementations. In the course of this thesis, we did not investigate how a pessimistic implementation 
+performs. Neither made we any assumptions on the usage of STM. The aim was to create a implementation
+that performs better in general. The timing tests in \ref{Chapter4} showed that this was not achieved. 
+There are cases, where the alternative implementation performs better than the initial implementation
+and vice versa. In this regard the thesis results are comparable to the results of Harris et al.. 
+Under the assumption that the transactions are sufficient expensive and the level of concurrency is 
+suffiecent high, the new implementation is faster. 
+
+
+In Chapter \ref{Chapter1} we defined the current problems of the STM implementation in the GHC. One problem
+is \textit{when} transactions are rolled back. This problem was solved with this thesis. The other problem is
+\textit{how} transactions are rolled back. This thesis contains no sulution to this problem, but \parencite{checkpoint}
+presents a concept that engages this problem. Agarwal et al. present a concept that automatically creates 
+\keyword{checkpoints}. If a transaction is rolled back, it is not restarted from the very beginning. The 
+systems validates the the checkpoints and restarts the execution from the latest valid checkpoint.
+The checkpoints basically consist of a log and a list of remaining operations. In theory, it is useful
+to create a checkpoint for every read operations on shared data structures. This is not recommended, since
+every creation of a checkpoint consumes time and memory. Thus if the systems creates the maximum amount 
+of checkpoints it never executes operations needlessly multiple times, but its overhead will
+most likely revokes the performance benefits.   

@@ -176,19 +176,21 @@ While the results of the first three tests seems not very promising for the need
 of the last three tests reveal an application where STMLA outperforms even the GHC implementation, which is an omptimized low 
 level \code{C} implementation. More importantly, these tests met the expectations regarding the costs per transaction. First,
 the performance does not decrease if we increase the costs per transaction. Since we do not execute any rollbacks in these 
-tests, the costs per transaction should not matter for STMLA (and STMWSL). The GHC and Project library on the other hand 
+tests, the costs per transaction do not matter for STMLA (and STMWSL). The GHC and Project library on the other hand 
 lose performance in these cases. Second, the performance does not change if we increase the level of concurrency. By increasing
 the level of concurrence the amount of rollback that are executed by the GHC and Project library are increased. STMLA and STMWSL
 on the other hand do not suffer from the increased level of concurrency. 
-An explanation and a possible solution for the poor performance of STMWSL is givin in \textbf{REF TO FUTURE WORK}.
+An explanation and a possible solution for the poor performance of STMWSL is givin in Chapter \ref{Chapter5}.
 
 
 \subsection{Second Test Series}
+Cooler Plot 
 
+Cooler Text 
 
+Cooler Plot2
 
-
-
+Cooler Text2
 
 
 
@@ -210,3 +212,5 @@ setup an increase in OS threads a decrease in performance entails. This \textit{
 the code is transactional code. A real worlds program is usually not structured like these tests. The portion
 of transactional code is far less. Hence this observation does not necessarily mean that STM is useless in 
 practise. Nevertheless, all tests presented in this section are executed with \code{N4} to allow real parallelism. 
+
+

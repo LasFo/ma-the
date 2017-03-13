@@ -3,6 +3,9 @@ Introduction
     Strong vs Weak Isolation
 
   conventions such as t1,t2 are tvars and a,b are values
+  Definitions 
+    conflict
+    critical
 
 Implementation
   example for every interface action
@@ -18,10 +21,21 @@ Evaluation
   Observations
     No memory leaks observed
 
-Future Work
-  globalCount overflow
-  STMWSL btter if alternative to MVar is used
 
-Definitions 
-  conflict
-  critical
+Conclusion 
+   Related Work
+     BaseSTM
+     Optimizing STM
+     stmDataStructure for stm motivation in Haskell
+     Checkpoint STM
+
+   
+   Future Work
+     globalCount overflow
+     STMWSL btter if alternative to MVar is used
+     Exception handling
+     stmInvariants
+     true consistency/compiler integration
+
+   Summary
+
