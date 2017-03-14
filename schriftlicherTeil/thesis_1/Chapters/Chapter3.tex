@@ -393,7 +393,7 @@ That is all \code{retry} does.
 \code{orElse} executes the first acion with the passed state and if the result is not 
 \code{Retry newState} it just returns this result. If it is \code{Retry newState},
 the second action is executed with the passed state (not the \code{newState}) to discard the 
-writes executed by the first action. Since the \code{readSet} is a \code{IORef}, 
+writes executed by the first action. Since the \code{readSet} is an \code{IORef}, 
 we do not lose the information on the TVars that was read. 
 
 

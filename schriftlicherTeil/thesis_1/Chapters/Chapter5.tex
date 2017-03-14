@@ -30,7 +30,6 @@ and vice versa. In this regard the thesis results are comparable to the results 
 Under the assumption that the transactions are sufficient expensive and the level of concurrency is 
 suffiecent high, the new implementation is faster. 
 
-
 In Chapter \ref{Chapter1} we defined the current problems of the STM implementation in the GHC. One problem
 is \textit{when} transactions are rolled back. This problem was solved with this thesis. The other problem is
 \textit{how} transactions are rolled back. This thesis contains no sulution to this problem, but \parencite{checkpoint}
@@ -41,4 +40,127 @@ The checkpoints basically consist of a log and a list of remaining operations. I
 to create a checkpoint for every read operations on shared data structures. This is not recommended, since
 every creation of a checkpoint consumes time and memory. Thus if the systems creates the maximum amount 
 of checkpoints it never executes operations needlessly multiple times, but its overhead will
-most likely revokes the performance benefits.   
+most likely revokes the performance benefits.
+
+\section{Future Work}
+Most of the functions provides by GHC STM is also provided by the alternative implementation presented in
+this thesis. Nevertheless, there are parts of the external interface and internal semantics that are not 
+covered by the new implementation. This lack of functionality offers the opportunity for further research.
+
+In Chapter \ref{Chapter3} we introduced \code{globalCount}, which is used to create globally unique 
+\code{ID}s. \code{ID} type synonym for \code{Int}. In Haskell \code{Int} is a 32 or 64 bit integer. Thus 
+the number of \code{ID}s is limited. The only usage of \code{ID} is to create new TVars. For terminating 
+applications this restriction can be neglected. If the user does not create and delete TVars all the time,
+he will run out of memory before \code{globalCount} overflows. If this STM implementation is used within
+infinite running systems such as web servers, it may be an issue (assuming that the systems creates and
+deletes TVars while running). This problem can be avoided by either using an \code{Integer}, which presents
+an integer of unlimmited size in Haskell, or by using a kind of conflict detection to be able to handle the 
+overflow. The first solution adds additional overhead to the implementation, since \code{Int} is slightly 
+faster than \code{Integer}. Furthermore, we need to alter the data types used within the implementation. 
+We used \code{IntMap} for the internal book keeping of the alternative implementation. A \code{IntMap} can
+not handle \code{Integers}. The overflow detection can be used in two ways. If the implementation is able 
+to reclaim unused \code{ID}s, it can reuse these. The conflict detection can also terminate the execution to 
+avoid a miss behaviour of the implementation. Currently the implementation does not detect the overflow 
+and thus may lead to problems in long running systems that use STM.
+
+In Chapter \ref{Chapter4}, we discovered that STMWSL perfoms poorly in the tests. The reasons for this are 
+that the implementation can roll back even if the transaction does not branch. Additionally does the 
+transaction perform two validations to avoid unnecessary locking. The locking is performed by taking
+the MVars that hold the value for a TVar. By taking this MVar no one is able to read these TVars, which 
+is important for the protocol. Unfortunately, the transaction that took these MVars is also not able to read 
+the associated TVars. Thus the transaction must evaluate the delayed reads before it acquires the locks of these 
+TVars. This contains the danger that the TVars are modified after the transaction read them and before
+it acquires the locks for them. This results in a rollback. If the lock holding transaction were able 
+to read the TVars, it could evaluate the delayed reads after it acquired the locks and validated. On the
+one hand, this would make the validation less expensive, since only the reads that were evaluated in the 
+computation phase are validated. On the other hand this would avoid rollbacks, since the values cannot 
+be modified in a manner that it evokes a rollback. After a transaction (called t1) reads the TVars, it is 
+still possible that another transaction modifies the values that are only read by t1, but not modified.
+This is not a violation of the ACI properties and thus would not cause a rollback (see \parencite{lockfreedom}).
+In conclusion, another locking mechanism that allows the lock holder to read the locked structure
+increases the performance of STMWSL significantly. This also adds more complexity to the implementation
+because reading in a locked context contains the risk of deadlocks. Avoiding these deadlocks adds 
+additional complexity to the implementation.
+
+The alternative implementation lacks a sufficient support for exceptions handling. If a exception is
+raised, this exception is thrown to the caller. This behaviour per se is not incorrect. If the 
+exception is raised because the transaction has seen an inconsistent view of the memory, it is 
+incorrect. When the transaction raises an exception during the execution the implementation must 
+check whether the transaction is valid or invalid. If it is invalid the transaction have to be rolled 
+back, otherwise it is a violation of the consistency property. If the transaction is valid, the 
+behaviour is design decision. Either the transaction is raised to the caller or the transaction 
+handles the exception like a retry, meaning it waits for a change of the read TVars and restarts.
+Both execution paths preserve the ACI properties and thus would be legit. 
+
+In \parencite{invariants} the authors introduce a new feature called \keyword{invariants} to STM.
+This allows the user to define invariants on the TVars that must be fulfilled before a transaction
+can commit. If a transaction tries to commit a state that violates at least one invariant the 
+transaction is rolled back (or suspended in case none of the read TVars have changed). This allows
+the user to compose STM functions even better for the costs of performance. An integration of 
+invariants in the alternative implementation inceases the usability of the alternative implementation
+to a level that is similar to GHC STM.
+
+STMLA has proven to be competitor to the GHC implementation of STM with regards to performance. Even 
+though the implementation makes no use of low level C primitives to boost its performance. There are 
+cases where the GHC implementation performs better. To implement STMLA with in a similar manner 
+with C primitives and integrating it in the compiler provides multiple benefits. The performance 
+increases could be enough to substitue the current implementation in GHC. This need to be investigated
+with additional performance test. Like stated in Chapter \ref{Chapter4}, this is a difficult topic,
+since STM is a universial tool and cannot be tested easily. Even if the implementation is not fast
+enough to replace the current implementation, it can provide an alternative to the current implementation
+which is used for specific cases either by the user or the compiler. More importantly the integration
+in the compiler allows the implementation to detect conflict before the commit phase. This is 
+important if the transaction executes an infinite loop because it saw an inconsistent view of the 
+memory. Without an early conflict detection the transaction does not break the loop because it never
+validates before the commit phase. The GHC implementation uses the runtime system to evoke validations
+in the computation phase to avoid these kinds of loops. A compiler integration of the alternative 
+implementation allows a similar mechanism.
+
+\section{Summary}
+In Chapter \ref{Chapter0} we gave a motivation for synchronization in general. To utilize multi-core
+processors and guarantee reactivity is mandatory for software nowadays. Multithreading is essential 
+to achieve these objectives. Multithreading also includes dangers such as lost updates or deadlocks. 
+These problems are engaged with synchronization tools, starting from semaphores to abstract concepts
+such as STM.
+
+Chapter \ref{Chapter1} first motivated STM in Haskell by comparing it to MVars. The usage of TVars 
+and MVar are similar, but TVars or more specifically STM guarantee us the ACI properties which makes
+deadlock avoidance much easier to handle. Furthermore, we explored the current implementation of STM
+in GHC. This library makes use of low level C primitives and the runtime systems to ensure its 
+correct behaviour and performance. At last, we defined the performance problems with this implementation
+and introduced the idea of delaying IO-reads to avoid one problem. The problems are \textit{how} and 
+\textit{when} a transaction is rolled back. This also definied the aims of the thesis, i.e. 
+to provide an implementation that avoids these problems. 
+
+The concept to provide an implementation that avoid the problems is presented Chapter \ref{Chapter2}.
+First we identified the technical reason for unnecessary rollbacks, the monad. We introduced the term
+\keyword{critical TVars} to denote TVars whos modification results in a rollback. Furthermore, we 
+specified when it is mandatory to evaluate an IO-read; if the value is used in a branch condition.
+The key idea is to minimize the time the TVars are critical. This is achieved by delaying the 
+evaluation of IO-reads as far as possible. The result is that IO-read, that are not needed for branch 
+conditions, are delayed to the commit phase and other are evaluated just before they are used.
+
+The main part of this thesis is presented in Chapter \ref{Chapter3}. The implementation of the previously 
+presented idea is described in detail in this Chapter. The STM monad is a state monad and processing a
+transaction is devided in two phases, the computation phase and the commit phase. In the computation
+phase the state is enriched by the \code{writeTVar} and \code{readTVar} operations. In the commit phase 
+this state is used to validate the transaction an possibly publish its results. To delay the execution 
+of the IO-read and to find out when a value is needed for a branch condition, the values are wrapped 
+by an \code{unsafePerformIO} action. If this action is not processed in the computation phase, its 
+execution is forced in the commit phase to ensure the reads are evaluated before the transaction 
+finishes. 
+
+The new implementation is compared to the original implementation and a reference implementation in
+Chapter \ref{Chapter4}. The results of these performance tests look promising. The new implementation
+is in all tests faster than the reference solution and in some test even faster than the GHC implementation.
+Nevertheless, more tests are needed to verify if the implementation is faster in general. The expectations 
+regarding the execution time, when increasing the level of concurrency, are also met. If we increase the 
+level of concurrency an no TVars are critical, the alternative implementation does not lose performance.
+
+\subsubsection{Conclusion}
+The aim of this thesis was to provide an alternative implementation of STM in Haskell to avoid the 
+problems of unnecessary rollbacks and unnecessary recomputations. The provided implementation 
+avoids the unnecessary rollbacks, but not the the unnecessary recomputations. The test results 
+have shown that the new implementation performs better than a reference implementation and equally
+to the original implementation. An implementation taht makes use of low level C primitives is 
+worth trying to prove if the concept can replace the concept of original implementation.  
