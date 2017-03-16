@@ -31,8 +31,7 @@ the evaluation cannot be delayed to the commit phase. The value is needed to dec
 
 This leads to the question whether there is a way to determine if the result of a \code{readTVar} effects the 
 control flow or not. The current implementation does not do this. The main problem is the bind
-operator: \code{>>= :: STM a -> (a -> STM b) -> STM b}\footnote{Remember that the do-notation used so far is 
-syntactic sugar for \code{>>=} and \code{>>}}. This operator allows us to extract the result of an STM action 
+operator: \code{>>= :: STM a -> (a -> STM b) -> STM b}. This operator allows us to extract the result of an STM action 
 from the STM context, for example the result of a \code{readTVar}. This means the STM library loses any possibility to 
 observe this value. The value is no longer in the libraries reach. Thus the library is not able to decide if 
 the value is used to alter the control flow. Furthermore the library is not able to determine if the control

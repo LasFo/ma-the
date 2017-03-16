@@ -151,6 +151,7 @@ data structures are used to implement the STM interface.
 Here we will inspect the implementation of every interface function. 
 
 \subsubsection{newTVar}
+\label{sec:newTVar}
 This is the only function (besides \code{atomically}) that uses IO actions. A TVar consists of three MVars
 and one ID. To ensure the uniqueness of the IDs the STM library defines \code{globalCount :: MVar Int}
 and a function \code{getGlobalId :: IO Int} that takes the \code{globalCount} increments it, writes it back 
@@ -161,6 +162,21 @@ are narrow, no countermeasures are performed to detect or avoid this problem.
 All MVar are allocated by \code{newMVar}. This means all MVars are initialized when the TVar is created.
 The queue holds and emppty list the lock holds unit and the value hold an IORef with the passed value.
 In the end the unchanged state as well as the new TVar is returned.
+
+Lets take a look at the following example:
+\begin{lstlisting}
+transaction = do 
+  tv <- newTVar 5
+  a <- readTVar tv
+  writeTVar tv (a + 1)
+\end{lstlisting}
+The first action of this transaction is the creation of a new TVar. This means a new IORef with 
+the value \code{5} is created. After that three new \code{MVars} are created. The first contains the 
+IORef, the second and empty list and the third \code{()}. With a the value gained from 
+\code{getGlobalId} an new TVar is created. We assume the ID is \code{1} for now. 
+The state on the other hand is not modified. Then the 
+second action, \code{readTVar tv}, is processed.
+
 
 \subsubsection{readTVar}
 This function is the core of the new implementation. One part of \code{readTVar} is similar to the original 
@@ -193,8 +209,28 @@ the \code{StmState}. It adds the newly created value to \code{uEReads}. And it e
 At this point there is no entry for the TVar in the writeSet yet, otherwise this part of readTVar
 would not be executed. A new entry is inserted. This entry contains the constructed value and 
 the MVar that holds the value of the TVar. The \code{newValue} field of this entry is \code{Nothing}.
-
 In the end the constructed value and the new state are returned in the \code{Success} constructor.
+
+Reconsider the example givin in the previous section:
+\begin{lstlisting}
+transaction = do 
+  tv <- newTVar 5
+  a <- readTVar tv
+  writeTVar tv (a + 1)
+\end{lstlisting}
+We explained already the first action. The first step of the second action is to lookup \code{tv}
+in the \code{writeSet}. Since \code{tv} is not present in the \code{writeSet}, \code{buildVal} is
+called to create the \code{unsafePerformIO} action. The result (called val in the 
+following) is added to the \code{writeSet}. Thus the \code{writeSet} is no longer empty. It contains 
+an entry for \code{tv}:
+\begin{lstlisting}
+ writeSet1 = {(1,(val, Nothing, mvar))}
+\end{lstlisting}
+\code{mvar} is the MVar of \code{tv} that holds the IORef with the value. The \code{1} is the
+ID of \code{tv}. Aditionally is \code{val} 
+added to \code{uEReads}. All other parts of the state are unchanged. Due to \code{<-} \code{val} is 
+bound to \code{a} in the end of the second action. 
+
 
 \subsubsection{writeTVar}
 This implementation is straight forward. Two modifications to the state are performed. One is
@@ -224,8 +260,38 @@ By forcing the evaluation of an expression you may evaluate IO-reads and thus ma
 that are not critical. This does not happen in the current implementation, because in every entry
 of the \code{writeSet} the first field is always not \code{Nothing} and thus can be returned
 without pattern matching on this value. 
-
 In the end the new state and \code{()} are returned.
+
+For the example it means that the \code{writeSet} and \code{notifies} are modified by the third 
+action. The \code{writeSet} looks like this after the third action\footnote{In fact \code{val} 
+is of type \code{Maybe Int} and thus cannot be added to \code{1}. The bind operator on \code{STM}
+unwraps the value, so we can use it as pure value. This means in the case, that the actual entries are
+\code{Just (fromJust val + 1)}. For the sake of comprehensibility, we ignore this for now.}:
+\begin{lstlisting}
+ writeSet2 = {(1,((val + 1), (val + 1), mvar))} 
+\end{lstlisting}
+In both, the first and the second field, \code{Just (val + 1)} is entered. \code{notifies} is 
+initially \code{return ()}. After the \code{writeTVar} action it is:
+\begin{lstlisting}
+ notifies1 = do
+    queue <- takeMVar waitQ
+    mapM_ (flip tryPutMVar ()) queue
+    putMVar []
+    return ()
+\end{lstlisting}
+\code{waitQ} is the queue of \code{tv}. The notification is performed by trying to put \code{()}
+to the MVars in the queue. It is important to use \code{tryPutMVar} instead of \code{putMVar}.
+Otherwise the implementation contains a deadlock (imagine two transactions try to notify the same 
+transaction at the same time). In the end the queue is emptied to avoid another transaction to 
+notify the same transactions again. The final \code{return ()} is the initial value of 
+\code{notifies}. The result of the three action in the example is:
+\begin{lstlisting}
+ Success state ()
+\end{lstlisting}
+\code{state} is a \code{StmState} that contains \code{notifies1}, \code{writeSet2} and the 
+modified \code{uEReads}. The \code{readSet} and \code{retryMVar} are similar to the one 
+on the initial state. This state is used in atomically to commit the changes.
+
 
 \subsubsection{atomically}
 This is the heart of every STM implementation in Haskell; it allows the user to execute STM 
@@ -344,6 +410,24 @@ is still able to read the locked TVars. Then the transaction is validated.
 If it is valid, the remaining reads are processed and the transaction publishes
 its modifications. At last the transaction returns the result, after unlocking
 the TVars.
+
+If we execute \code{transaction} introduced in Section \ref{sec:newTVar} with 
+\code{atomically} (of STMLA), the computation phase produces the previously mentioned state.
+This \code{writeSet} in this state contains a single entry. The entry for the
+newly created TVar. The commit phase starts by validating the \code{readSet}. 
+Since the \code{readSet} is empty, the validation succeeds and the transaction
+acquires the lock for \code{tv}. After the lock is acquired, the transaction 
+evaluates \code{uEReads}. \code{uEReads} contains one value, namely \code{val},
+the {unsafePerformIO} action that reads \code{tv}. The evaluation of this value 
+has (thanks to sharing) an effeect on the \code{writeSet} as well:
+\begin{lstlisting}
+ writeSet = {(1,(Just (5 + 1), Just (5 + 1), mvar))} 
+\end{lstlisting}
+The next step in to prepare the writes. This means \code{mvar} is emptied via 
+\code{takeMVar}. Before it is filled again, \code{notifies} is executed. \code{notifies}
+does nothing because the \code{waitQ} of \code{tv} is empty. Finally the expression (\code{5 + 1})
+written to \code{mvar}. Note that the expression itself is not evaluated. The last step
+before returning \code{()} is to release the lock for \code{tv}.
 
 \subsubsection{>>=}
 The monadic bind operator, \code{>>=}, is an important part of the interface, because it allow us 

@@ -353,7 +353,7 @@ each time the executing thread yields. Exceptions raised by the transaction are 
 the transcation waits until at least one TVar changed. If it is invalid the transaction is restarted immediately.
 In conclusion, the user of STM can not observe that the transaction worked on an inconsistent state.
 
-\subsubsection{Synchronization} The last important property of a STM system is the way it synchronizes transactions. In order to validate
+\subsubsection{Synchronization} Another important property of a STM system is the way it synchronizes transactions. In order to validate
 correctly the systems needs to make sure the validation result does not depend on race conditions and is correct until the commit 
 is completed. This means either concurrent transactions are delayed or their commit does not change the each others validity. In Haskell the first
 approach is taken. When a transaction commits, the TVars in the log that are updated are locked, thus other transactions that may conflict are not 
@@ -363,6 +363,18 @@ however the chances are narrow. Rolling back the transaction seems to be harsh i
 and then trying to commit, but if two transactions try to lock the same TVar, both transactions try to write this TVar. 
 This means at least one of the transactions is rolled back, since the TVar is logged with the old value. 
 Thus the first transaction to commit would modify a value in the log of the other transcation.
+
+\subsubsection{Strong and Weak Isolation} When executing multiple transactions, STM is must be able to isolate these transactions.
+The ACI properties demand this. What happens if non transactional code work on the same shared data structures is up to the STM 
+implementation. If it isolates transactional and non transactional code, it is called strong isolation; otherwise, weak isolation.
+STM has limited possibilities to effect non transactional code. It is not possible to roll back such code. Either STM prevents 
+external accesses completely or it suspends external accesses until no transaction is using the shared data. STM in Haskell uses 
+the first approach. The only way to access TVars is to use the functions \code{readTVar} and \code{writeTVar}. The type system 
+ensures that every access to TVars is in an \code{STM} action. The only way to execute \code{STM} actions on the other hand is
+to use atomically, by which this action becomes a transaction. STM in Haskell provides strong isolation although it is possible 
+to read TVars with \code{readTVarIO}. As the name suggests this function returns an IO action which reads a single TVar. 
+However, it is not possible to modify transactional variables with IO actions. 
+
 
 \section{Problems}
 In this section we turn over to the problems in the current implementation. These problems can be examined independently. The first problem is about
@@ -569,30 +581,34 @@ is executed twice. If we just execute the parts of a transaction that are invali
 considerable amount of time when a transaction is rolled back. This means for the exmple, it is enough to remove 
 the entry for \code{acc1} from the log an execute the first two actions of transfer instead of all actions.
 
-This concludes the overview on the problems of the current STM implementation. We will now turn over to the 
-solution for this problems.
+\section{Terminology and Conventions}
+To avoid miss understandings, we use this section to define the meaning of specific terms and explain code conventions.
 
+\subsubsection{Conflict}
+A \keyword{conflict} in STM is if two transactions access the same TVar in the following way. Transaction t1 reads 
+the TVar. After t1 has read the TVar and before it has commited, transaction t2 successfully commits a modification 
+to this TVar. This means that t1 works with an outdated value and has to be rolled back. 
 
+\subsubsection{Critical TVar}
+A TVar is \keyword{critical} for a transaction t1 if a modification to this TVars causes t1 to roll back. In the current
+implementation each time a transaction executes \code{readTVar}, the read TVar becomes critical for this transaction. 
 
+\subsubsection{Deadlock}
+The term \keyword{deadlock} is defined in different ways in literature. A deadlock is either a property
+of the state of a running system or a property of the source code. In the course of this thesis a deadlock
+is a static code property. A program contains a deadlock if there is a schedule that no systems progress is
+possible. 
 
+\subsubsection{Code Conventions}
+In the code examples givin in this thesis, I often use undeclared variables for the sake of space.
+The type of these variables can usually be derived from the context they are used in. Nonetheless, for 
+clearity I will give a guideline for naming conventions. In many code examples \code{t1} and \code{t2} 
+are used to denote TVars. The type of these TVars depend on the context and is not important for the
+examples. The examples that refer to the bank accounts (\ref{STMInterface}) use \code{acc1} and 
+\code{acc2}. If \code{t1} or \code{t2} are used to denote transactions, this is always explicitly 
+noted in the text. \code{a} and \code{b} denote pure values and are usually introduced in the code.
 
-
-
-% This is the frist phase of a transaction execution. In this phase the reads and all pure calculations are performed. 
-% Aforementioned IO action cannot be executed within a transaction, but pure computation may be executed like the following
-% example demonstrates:
-% \begin{lstlisting}
-% transaction = do 
-%   val <- readTVar t
-%   if f val 
-%     then writeTVar t (g val)
-%     else retry
-% 
-% f v = some calculations...    
-% g v = some other calculations...
-% \end{lstlisting}
-% Thus even if the calculation of \code{g} can be delayed thanks to laziness, the calculation of f has to be performed within that transaction.
-% The results of \code{f} effects the control flow and thus needs to be evaluated to determine the result of the branch statement. 
-% 
-% Since 
-
+All code example use the do-notation, which is syntactic sugar for the monadic functions \code{>>=} and 
+\code{>>}. In the text that explain the examples, we use \code{>>=} and \code{>>} nevertheless.
+In case you are not familiar with do-notation, it is highly recommended to take a look at 
+\url{https://wiki.haskell.org/Keywords#do}.
