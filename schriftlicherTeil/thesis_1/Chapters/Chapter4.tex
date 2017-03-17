@@ -213,4 +213,16 @@ the code is transactional code. A real worlds program is usually not structured 
 of transactional code is far less. Hence this observation does not necessarily mean that STM is useless in 
 practise. Nevertheless, all tests presented in this section are executed with \code{N4} to allow real parallelism. 
 
-
+In addition to the performance test, I performed tests to check the implementations for memory leaks. The GHC implementation
+as well as STMLA and STMWSL do not produce memory leaks as far as tested. The Project implementation on the other hand 
+contains a memory leak. When ever a transaction reads a TVar, it enters its \code{retryMVar} to the queue of the TVar
+to allow other transactions to notify it. If the TVar is never written, but continuously read, this queue grows
+and is never emptied. The transactions themself do not remove the MVar from the queue when they rollback or commit.
+This is for performance reasons because it requires the transaction to search for its own MVar in all TVar queues it 
+has accessed. In STMWSL and STMLA the only time a transaction adds something to the queue is when it executes 
+\code{retry}. Additionally removes the transaction its MVar from the queue, when it is not longer needed. In this 
+case the performance is not as important as it is for the Project implementation. The \code{retry} either suspends 
+the transaction and thus removing the MVars from the queues is a minor performance issue or it does not add the MVar to
+the queue at all. The other entries of the TVar can not produce any memory leaks because they can only contain one entry
+at a time. Since the log is discarded each time the transaction rolls back or successfully commits, unused data is stored
+within the log.

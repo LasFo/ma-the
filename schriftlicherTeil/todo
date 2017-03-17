@@ -1,13 +1,5 @@
-Implementation
-  notes on implementation
-    ordered locking
-    locking prevents reads(another structure than MVar would 
-                           allow further optimizations)
-
 Evaluation
   Results
     Scaling
  
-  Observations
-    No memory leaks observed
 
