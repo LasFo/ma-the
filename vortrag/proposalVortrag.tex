@@ -8,13 +8,15 @@ alternativetitlepage=true,% Use the fancy title page.
 %titlepagelogo=logo-polito,% Logo for the first page.
 ]{Torino} 
 
+\newcommand{\code}[1]{\textbf{#1}}
+
 \usepackage{parcolumns}
 \usepackage{listings} 
 \usepackage{subfig}
 \author{Lasse Folger}
-\title{\huge Software Transaction Roll Back Avoidance}
-\subtitle{Master Proposal Talk}
-\date{\today}
+\title{\huge Lazy Software Transactional Memory}
+\subtitle{Master Thesis}
+\date{05.04.2017}
 
 \lstset{escapeinside=!!}
 \begin{document}
@@ -71,10 +73,10 @@ writeMVar acc2 (a2 + 50)
       Thread 2:      
       \begin{figure}
        \begin{lstlisting}[frame=single]
-a1 <- takeMVar acc2 
-a2 <- takeMVar acc1 
-writeMVar acc2 (a1 - 50)
-writeMVar acc1 (a2 + 50)
+b1 <- takeMVar acc2 
+b2 <- takeMVar acc1 
+writeMVar acc2 (b1 - 50)
+writeMVar acc1 (b2 + 50)
        \end{lstlisting}
       \end{figure}
     \end{minipage}
@@ -115,9 +117,9 @@ atomically $
     \pause
     $\Rightarrow$ works fine, because transactions provide ACI(D) properties
 \end{frame}
-%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%Current Implementatin%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%Current Implementation%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   \begin{frame}
     \frametitle{Current Implementation (Control.Concurrent.STM)}
     \begin{itemize}\setlength\itemsep{1em}
@@ -129,14 +131,26 @@ atomically $
   \end{frame}
   
   \begin{frame}
+   \frametitle{Transactional Log}
+   \begin{itemize}\setlength\itemsep{1em}
+    \item one log per transaction
+    \item three elements per log entry
+          \begin{itemize}
+           \item \code{TVar}
+           \item \code{expectedValue}
+           \item \code{currentValue}
+          \end{itemize}
+   \end{itemize}
+  \end{frame}
+  
+  \begin{frame}
    \frametitle{Modify Operations}
    \begin{itemize}\setlength\itemsep{1em}
     \item \textbf{newTVar}: creates a new, initialized TVar 
-    \item \textbf{writeTVar}: add the TVar and the value to the write set
-    \item \textbf{readTVar}: add the TVar and its version number to the read set
-    \item read set and write set serve as local buffer 
+    \item \textbf{writeTVar}: updates \textit{currentValue} in log entry
+    \item \textbf{readTVar}: reads TVar from log or actual TVar
   \end{itemize}
-  \end{frame}
+\end{frame}
   
 %   \begin{frame}
 %    \frametitle{Control Flow Operations}
@@ -153,10 +167,10 @@ atomically $
   \begin{frame}
    \frametitle{\lstinline{atomically :: STM a -> IO a}}
    \begin{enumerate}\setlength\itemsep{1em}
-    \item compute the read set and write set
+    \item compute the log
     \item lock TVars
-    \item validate the read set
-    \item if valid then commit the write set
+    \item validate the log
+    \item if valid then commit
     \item else roll back
    \end{enumerate}
   \end{frame}
@@ -165,8 +179,8 @@ atomically $
    \frametitle{Validation}
     \begin{enumerate}\setlength\itemsep{1em}
 %       \item lock the TVars in the read set
-      \item compare version number in read set with actual version number
-      \item if there is no difference then return valid 
+      \item compare \textit{expectedValue} to the value in the actual TVar
+      \item if all values match return valid 
       \item else return invalid
     \end{enumerate}
   \end{frame}
@@ -175,7 +189,7 @@ atomically $
 %%%%%Problems%%%%%
 %%%%%%%%%%%%%%%%%%
 
-    \begin{frame}[fragile]
+\begin{frame}[fragile]
     \frametitle{Problem}
     \fboxsep=0pt
     \noindent
@@ -195,30 +209,52 @@ writeTVar acc2 (a2 + 50)
       Thread 2:
     \begin{figure}
      \begin{lstlisting}[frame=single]
-a1 <- readTVar acc2
-a2 <- readTVar acc1
-writeTVar acc2 (a1 - 50)
-writeTVar acc1 (a2 + 50)
+b1 <- readTVar acc2
+b2 <- readTVar acc1
+writeTVar acc2 (b1 - 50)
+writeTVar acc1 (b2 + 50)
      \end{lstlisting}
     \end{figure}
     \end{minipage}
-    \vfill
-    \pause
-    $\Rightarrow$ either sequential or one transaction is rolled back
 \end{frame}
 
 
     \begin{frame}[fragile]
-    \frametitle{Idea}
+    \frametitle{Problem}
     \fboxsep=0pt
     \noindent
     \begin{minipage}[t]{0.48\linewidth}
-      Thread 1: 
-          \begin{figure}
+      Thread 1:
+    \begin{figure}
+     \begin{lstlisting}[frame=single]
+[(acc1, a1, a1-50),
+ (acc2, a2, a2+50)]
+     \end{lstlisting}
+    \end{figure}
+    \end{minipage}%
+    \hfill%
+    \begin{minipage}[t]{0.48\linewidth}
+      Thread 2:
+    \begin{figure}
+     \begin{lstlisting}[frame=single]
+[(acc2, b1, b1-50),
+ (acc1, b2, b2+50)]
+    \end{lstlisting}
+    \end{figure}
+    \end{minipage}
+\end{frame}
+
+\begin{frame}[fragile]
+    \frametitle{Problem}
+    \fboxsep=0pt
+    \noindent
+    \begin{minipage}[t]{0.48\linewidth}
+      Thread 1:
+    \begin{figure}
      \begin{lstlisting}[frame=single]
 a1 <- readTVar acc1
-writeTVar acc1 (a1 - 50)
 a2 <- readTVar acc2
+writeTVar acc1 (a1 - 50)
 writeTVar acc2 (a2 + 50)
      \end{lstlisting}
     \end{figure}
@@ -226,21 +262,72 @@ writeTVar acc2 (a2 + 50)
     \hfill%
     \begin{minipage}[t]{0.48\linewidth}
       Thread 2:
-          \begin{figure}
+    \begin{figure}
      \begin{lstlisting}[frame=single]
-a1 <- readTVar acc2
-writeTVar acc2 (a1 - 50)
-a2 <- readTVar acc1
-writeTVar acc1 (a2 + 50)
+b1 <- readTVar acc2
+b2 <- readTVar acc1
+writeTVar acc2 (b1 - 50)
+writeTVar acc1 (b2 + 50)
      \end{lstlisting}
     \end{figure}
     \end{minipage}
     \vfill
-    \pause
-    $\Rightarrow$ delay the evaluation of readTVar to avoid rollback, but...
+    $\Rightarrow$ either sequential or one transaction is rolled back
+\end{frame}
+
+
+\begin{frame}
+ \frametitle{Critical TVar}
+   \begin{itemize}\setlength\itemsep{1em}
+    \item Critical between read and commit
+    \item modifications to critical TVars cause rollback
+   \end{itemize}
+   \pause
+   \vfill
+   $\Rightarrow$ minimize the time TVars are critical 
+\end{frame}
+
+
+  
+  \begin{frame}
+   \frametitle{Critical TVar}
+   \begin{figure}
+    \includegraphics[scale=0.7]{ressources/CriticalValue.pdf}
+   \end{figure}
+   \end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Idea}
+\begin{lstlisting}
+transfer = do 
+  a1 <- readTVar acc2
+  writeTVar acc2 (a1 - 50)
+  a2 <- readTVar acc1
+  writeTVar acc1 (a2 + 50)
+\end{lstlisting}
 \end{frame}
   
-  \begin{frame}[fragile]
+     
+  \begin{frame}
+   \frametitle{Critical TVar}
+   \begin{figure}
+    \includegraphics[scale=0.7]{ressources/CriticalValue.pdf}
+   \end{figure}
+   \begin{figure}
+    \includegraphics[scale=0.7]{ressources/CriticalValue2.pdf}
+   \end{figure}
+   \end{frame}
+
+\begin{frame}
+ \frametitle{Idea}
+ \begin{itemize}\setlength\itemsep{1em}
+  \item delay the evaluation of \code{readTVar} to commit phase
+  \item no TVars is critical at all  
+  \item \code{writeTVar} does not need the value in the computation phase
+ \end{itemize}
+\end{frame}
+  
+\begin{frame}[fragile]
    \frametitle{Idea does not work}
    \begin{lstlisting}[language=Haskell]
 limitedTransfer src dst am = do
@@ -252,65 +339,88 @@ limitedTransfer src dst am = do
              writeTVar dst (a2 + am)
    \end{lstlisting}
    \vfill
-    ... the transaction may need the value
+   $\Rightarrow$ idea does not work because the value is needed.
 \end{frame}
 
-  \begin{frame}[fragile]
-   \frametitle{Problem}
-      \begin{itemize}\setlength\itemsep{1em}
-       \item\lstinline[language=Haskell]{(>>=) :: STM a -> (a -> STM b) -> STM b}
-       \item Bind extracts the value from the STM context
-       \item STM no longer controls this value.
-       \item Need another Typeclass than Monad
-      \end{itemize}
-\end{frame}
-
-
-  \begin{frame}[fragile]
-   \frametitle{Applicative}
-      \begin{itemize}\setlength\itemsep{1em}
-       \item Applicative is less powerfull than Monad
-       \item\lstinline[language=Haskell]{(<*>) :: STM (a -> b) -> STM a -> STM b}
-       \item The value can be modified without leaving the STM context
-      \end{itemize}
-\end{frame}
+%   \begin{frame}[fragile]
+%    \frametitle{Problem}
+%       \begin{itemize}\setlength\itemsep{1em}
+%        \item\lstinline[language=Haskell]{(>>=) :: STM a -> (a -> STM b) -> STM b}
+%        \item Bind extracts the value from the STM context
+%        \item STM no longer controls this value.
+%        \item Need another Typeclass than Monad
+%       \end{itemize}
+% \end{frame}
+% 
+% 
+%   \begin{frame}[fragile]
+%    \frametitle{Applicative}
+%       \begin{itemize}\setlength\itemsep{1em}
+%        \item Applicative is less powerfull than Monad
+%        \item\lstinline[language=Haskell]{(<*>) :: STM (a -> b) -> STM a -> STM b}
+%        \item The value can be modified without leaving the STM context
+%       \end{itemize}
+% \end{frame}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%What I have done%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%
+%   
+%   \begin{frame}
+%    \frametitle{Project}
+%    \begin{itemize}\setlength\itemsep{1em}
+%     \item Improved a pure Haskell implementation
+%     \item Direct notification
+%     \item Explicit, ordered locking
+%     \item Optimisations
+%    \end{itemize}
+%   \end{frame}
+
+
+  \begin{frame}
+   \frametitle{Solution}
+   \begin{itemize}\setlength\itemsep{1em}
+    \item delay evaluation as far as possible
+    \item evaluate them just before they are needed..
+    \item ..or in the commit phase
+   \end{itemize}
+  \end{frame}
+
+
+  \begin{frame}
+   \frametitle{When is a value needed?}
+   \begin{itemize}\setlength\itemsep{1em}
+    \item branch conditions
+       \begin{itemize}
+        \item if-then-else
+        \item case
+        \item patternmatching
+        \item guards
+       \end{itemize}
+    \item IO-actions $\Rightarrow$ not allowed in STM
+   \end{itemize}
+  \end{frame}
+
+  \begin{frame}
+  \frametitle{Implementation}
+  \begin{itemize}\setlength\itemsep{1em}
+   \item pure Haskell implementation
+   \item state monad
+   \item computation phase modifies the state 
+   \item commit phase uses state to validate and commit
+  \end{itemize}
+  \end{frame}
   
   \begin{frame}
-   \frametitle{Project}
-   \begin{itemize}\setlength\itemsep{1em}
-    \item Improved a pure Haskell implementation
-    \item Direct notification
-    \item Explicit, ordered locking
-    \item Optimisations
-   \end{itemize}
+  \frametitle{UnsafePerformIO}
+  \begin{itemize}\setlength\itemsep{1em}
+   \item pure Haskell implementation
+   \item state monad
+   \item computation phase modifies the state 
+   \item commit phase uses state to validate and commit
+  \end{itemize}
   \end{frame}
-
   
-  \begin{frame}
-   \frametitle{Master Thesis until now}
-   \begin{itemize}\setlength\itemsep{1em}
-    \item Implementation based on Applicative 
-    \item Works without rollbacks...
-    \item ...and without branches
-    \item Constraints on TVars to gain some control
-    \item Still no \textit{retry} or \textit{orElse}
-   \end{itemize}
-  \end{frame}
-
-
-  \begin{frame}
-   \frametitle{Master Thesis until now}
-   \begin{itemize}\setlength\itemsep{1em}
-    \item Composition by combination of Monad and Applicative
-    \item\lstinline{>>=} evaluates and enables rollbacks
-    \item\lstinline{<*>} enables to modify values without rollbacks
-    \item \lstinline[language=Haskell]{writeTVar :: TVar a -> STM a -> STM ()} 
-   \end{itemize}
-  \end{frame}
 
 %   \begin{frame}[fragile]
 %    \frametitle{\lstinline[language=Haskell]{writeTVar :: TVar a -> STM a -> STM ()}}
