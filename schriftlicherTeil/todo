@@ -1,3 +1,12 @@
+PHILOSOPHEN
+
+Lazy STM renaming?
+
+
+Introduction
+  Definitions
+    clear definitions
+
 Evaluation
   Results
     Scaling
@@ -6,4 +15,15 @@ Abstract
 
 Achnowledgements 
 
-Unnessary Recomputations
+Future works
+   Unnessary Recomputations
+   Exception Handling 
+     TVar may remain locked
+
+Appendix 
+  Applicative
+    Uncomfortable
+    No sharing
+  STMWSL
+    Useless because readSet < writeSet
+
