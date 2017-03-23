@@ -342,8 +342,9 @@ comes in handy. \code{buildVal} created a \code{Maybe} value that was wrapped wi
 \code{unsafePerformIO} action. If we force the evaluation of this expression, the 
 IO-read is performed, but the underlying expression is not evaluated, because it is wrapped 
 in the \code{Just} constructor. Without this constructor, we would evaluate the expression that 
-is stored in the TVar. Imagine this expression is a complex computation. This would mean, we 
-would suffer a performance overhead in the case, that this computation is not needed. 
+is stored in the TVar. Imagine this expression is a complex computation. This means, we 
+suffer a performance overhead because the computation is not yet needed (even worse if the
+computation is not needed at all). 
 Even worse we execute this in the commit phase, while we hold the locks for many TVars.
 To maximize parallelism, we aim to minimize the time in the commit phase. Besides these
 performance problems, there is a serious semantic problem. Everytime we force the 
@@ -401,12 +402,12 @@ we get the values of the TVars when we prepare the writes, because we execute
 require the \code{unsafePerformIO} actions produced by \code{buildVal} to 
 behave diffrently when it is executed in the computation phase and in the 
 commit phase. Nevertheless, this topic remains for future work and is discussed 
-in \textbf{REF TO FUTURE WORK}.
+in Chapter \ref{Chapter5}.
 
 A solution that combines STMLA and STMWSL would be better\footnote{This could 
 not be proved, because no such implementation is present currently.}.
 A combined solution locks the TVars that the transaction has modified in a 
-manner that not \textbf{other} transaction can read them. The transaction itself
+manner that no \textbf{other} transaction can read them. The transaction itself
 is still able to read the locked TVars. Then the transaction is validated. 
 If it is valid, the remaining reads are processed and the transaction publishes
 its modifications. At last the transaction returns the result, after unlocking
