@@ -14,11 +14,8 @@ Master.STMWSL                  3.3500                         3.4445            
 
 
 
-
-Scaling1 is performed with x in {1..50}, StmTest(x,1000,50,20) and 25 iterations
-   and with x in {51..75} StmTest(x,1000,50,20) and 15 iterations
-Scaling2 is performed with x in {1..75}, PerformanceTest(x,1000,50,5,5) and 10 iterations
-Scaling3 is performed with x in {1..50}, StmTest(50,1000,50,x) and 15 iterations
+Scaling  = StmTest(x,500,100,20) * 20, x in {1..75}
+Scaling2 = PerTest(x,500,200,5,5) * 20, x in {1..75}
 
 the transactions need to be sufficient expensive to gain an advantage from
 my new implementation

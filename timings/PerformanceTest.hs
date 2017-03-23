@@ -5,22 +5,22 @@ import Control.Concurrent
 import System.Random
 import qualified Data.IntMap.Strict as IM
 import Data.Maybe (fromJust)
----import Control.Concurrent.STM
-import STMP
---import STMLA
+--import Control.Concurrent.STM
+--import STMP
+import STMLA
 --import STMWSL
 import System.Environment
 
 
-threads     = 20
-iterations  = 2000
+--threads     = 20
+iterations  = 500
 tvars       = 200
 rWRatio     = 5
-writes      = 20
+writes      = 5
 
 main = do
- -- list <- getArgs
- -- let threads = read $ head list
+  list <- getArgs
+  let threads = read $ head list
   sync <- atomically $ newTVar threads
   ts <- atomically $ sequence $ replicate tvars (newTVar 5)
   let tList = zip [1..] ts

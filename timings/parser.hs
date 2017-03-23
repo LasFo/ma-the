@@ -4,7 +4,7 @@ main = do
   args <- getArgs
   res <- parser $ head args
   let threads = head . tail $ args
-      fileline = threads ++ " " ++ show res ++ "\n"
+      fileline = threads ++ "," ++ show res ++ "\n"
   appendFile (last args) fileline
   print res
 

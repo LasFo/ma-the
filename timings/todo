@@ -1,9 +1,2 @@
 compare the time of computation phase and commit phase
 
-test again with STMWSL2 since it is now different from STMWSL1
-test again after altering STM that garbage is filled in readTVar
-                          touchedTVars is no longer part of the state
-                          remove stmAction from local definitions 
-                          retry locks TVars in readSet not in touchedTVars
-                          forced evaluation of res no longer needed
-                          zweitgeteiltes write noetig?
