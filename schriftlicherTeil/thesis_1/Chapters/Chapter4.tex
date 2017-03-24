@@ -134,13 +134,14 @@ test. The workload per thread is unchanged and thus the total workload increases
   PerTest(20,500,200,20,5)   & 3.0670 &  3.3110 & 2.9425 & 3.4445 \\ \hline
   PerTest(20,500,200,5,20)   & 3.1520 &  3.4335 & 2.9455 & 3.3500 \\ \hline
  \end{tabular}
-\caption[Runtime: test series 1]{Average runtime in seconds for tests with a total workload of 1.000.000 \code{readTVar} operations.}
+\caption[Runtime: Performance Tests]{Average runtime in seconds for tests with a total workload of 1.000.000 \code{readTVar} operations.}
 \label{fig:results1}
 \end{figure}
 
-Figure \ref{fig:results1} shows the results of the first test series. The first column contains the test and its configuration.
+The results of the first test series are shown in Figure \ref{fig:results1}. 
+The first column contains the test and its configuration.
 StmTest(threads,iterations,tvars,changes) means the \code{StmTest} was applied with the previously explained configuration parameters.
-Same holds for \code{PerformanceTest} as PerTest(threads,iterations,tvars,rWRatio,writes). The first row introduces the different 
+PerTest(threads,iterations,tvars,rWRatio,writes) is the same for \code{PerformanceTest}. The first row introduces the different 
 implementations. GHC is the current library in GHC 8. Project is the highlevel library that this thesis is based on.
 STMLA and STMWSL are described in the previous chapter. For unknown reasons STMWSL performs poorly in this tests.
 
@@ -184,15 +185,48 @@ An explanation and a possible solution for the poor performance of STMWSL is giv
 
 
 \subsection{Second Test Series}
-Cooler Plot 
+We use the second test series to study the scalability of the implementations. We used \code{StmTest} as well as
+\code{PerformanceTest} to compare the four implementations. Similar to the previous test series, we executed the
+same test multiple times and meassured the average execution time. The tests are randomized by the test themself 
+and the scheduler. To get a representative result for the runtime, it is inevitable to execute the test multiple 
+times. To test the scalability we increased the number of threads over the course of the series. The other 
+configuration parameters remained untouched over the course of the whole test series. 
+\begin{figure}
+ \centering
+ \includegraphics[scale=0.4]{Figures/Scaling1}
+\caption[Runtime: Scaling Test I]{Results of the scaling tests with \code{StmTest}}
+\label{fig:scaling1}
+\end{figure}
 
-Cooler Text 
+Figure \ref{fig:scaling1} show the result of the scaling test performed with \code{StmTest}. We used the following 
+configuration: 500 iterations per thread, 100 TVars stored in a list and 20 modifications per transactions with 
+a varying number of threads. The x-axis describes the number of threads, while the y-axis contains the total runtime.
+Note that an increase in thread results in an increased total work load. The means the increase in runtime in all implementation
+is not only due to the fact that the level of concurrency is increased but also due to the increase of the total workload.
+All implementations scale equally. The GHC implementation is slightly better and STMWSL is slightly worse than the other 
+implementations. Overall increases the runtime linear with number of threads. The GHC implementation stands out because of
+its unstable execution time in this test series. Nevertheless, it still performs better than the other implementations.
 
-Cooler Plot2
+\begin{figure}
+ \centering
+ \includegraphics[scale=0.4]{Figures/Scaling2}
+\caption[Runtime: Scaling Test II]{Results of the scaling tests with \code{PerformanceTest}}
+\label{fig:scaling2}
+\end{figure}
 
-Cooler Text2
+The Scaling tests performed with \code{PerformanceTest} are presented in Figure \ref{fig:scaling2}. The configuration 
+is as follows: 500 transactions per thread, 200 TVar stored in an \code{IntMap}, five times more reads than write and
+five writes per transaction. The results are similar to the previouse results. All implementation scale on equally while
+GHC is a slightly faster and STMWSL slightly slower. The differences in the execution time of GHC are less noticable than 
+in the first test. The execution time of the project implementation on the other hand varies much more in this test than
+in the first test. Nonetheless, the general tendencies are not different. 
 
-
+This test series show that all implementations are scalable. That GHC performs better than the highlevel implementations
+is not surprising. In contrast to the tests presented in the previouse section, these test consist of small transactions.
+The GHC implementation uses a very light weighted locking scheme. This makes the commit phase of the GHC implementation
+significantly faster than the commit phase of the high level implementation. Thus the fixed (per transaction) overhead
+of the highlevel implementations is higher than that of the GHC implementation. Since these tests use smaller transactions
+than the first series, the results are reasonable.
 
 \subsection{Observations}
 While executing the tests, I noticed that the runtime option \code{N} that creates multiple OS threads slows down the 

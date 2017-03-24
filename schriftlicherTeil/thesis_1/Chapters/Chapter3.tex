@@ -34,7 +34,7 @@ thesis.
 \centering
 \includegraphics[scale=0.8]{Figures/implementations}
 \decoRule
-\caption[implementations]{The STM implementations for Haskell.}
+\caption[Implementations]{The STM implementations for Haskell.}
 \label{fig:implementations}
 \end{figure}
 
@@ -98,8 +98,8 @@ The \code{writeSet} is similar to the log in the GHC implementation. Here it is 
 \footnote{This refers to the IntMap in the standart libraries of Haskell: \url{https://hackage.haskell.org/package/containers-0.5.8.1/docs/Data-IntMap-Strict.html}}. 
 The keys are the IDs of the associated TVars. The elements contain the \code{expectedValue},
 the \code{newValue}, and \code{actualMVar}. The \code{actualMVar} is the value holding MVar of the TVar and is needed in the commit
-phase when the transaction sucessfully commits to publish its modifications. We already know the 
-\code{expectedValue} and the \code{newValue} from \ref{sec:GHCImpl}, but their purpose is slighty 
+phase when the transaction sucessfully commits to publish its modifications. The \code{expectedValue} 
+and \code{newValue} are similar to the log entries presented in \ref{sec:GHCImpl}, but their purpose is slighty 
 different. The \code{Maybe} type indicates that the values also can be \code{Nothing}. This holds
 only for the second entry. The first entry has the \code{Maybe} type for the same reason 
 \code{Success} has it. The second entry on the other hand can become \code{Nothing}. This indicates

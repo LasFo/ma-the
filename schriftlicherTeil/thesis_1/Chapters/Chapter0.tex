@@ -35,16 +35,17 @@ awaken, it tries \code{P} again.
 This seem to be a simple construct, but its capabilities are enormous. It is highly complex to use a semaphore correctly.
 The main problem of semaphores is the so called deadlock\footnote{In the course of this thesis I will refer to deadlocks as a static propertie rather than a state of a system.}. 
 This means there is a schedule, where no progress of the systen is possible, because all threads are waiting for a semaphore. The term deadlock is not exclusive for semaphores.
-It is used for all blocking mechanisms. To avoid such deadlocks is very hard even when using one or few semaphores. 
+It is used for all blocking mechanisms. Avoiding deadlocks is very hard even when using one or few semaphores. 
 It is nearly impossible to avoid deadlocks when you trie to compose semaphore based functions.
 
-To avoid the problems of semaphores while maintaining the expressiveness of semaphores in Haskell the so called software transactions were introduced \parencite{STMBase}.
-Sofware transactions are inspired by the long known database transactions \parencite{DBTrans}. Software transactions provide an interface to program with 
-single element buffers. If you are using this interface the underlying implementation ensures the so called \keyword{ACI(D)} properties. \textbf{A} for atomicity.
-This means a transactions appears to be processed instantaneous. \textbf{C} for consistency. This means that a consistent view of the system is always guaranteed.
-\textbf{I} stands for isolation. If multiple thread work on the same data they do not influence each other indirectly. The only way threads can influence each other 
-is by communicating through shared memory.
-\textbf{D} stand for durability, but is relevant only for data base transactions. 
+To avoid the problems of semaphores while maintaining the expressiveness of semaphores in Haskell, the so called software transactions were introduced \parencite{STMBase}.
+Sofware transactions are inspired by the long known database transactions \parencite{DBTrans}. Software transactions in Haskell provide an interface to program with 
+single element buffers. If you are using this interface the underlying implementation ensures the so called \keyword{ACI(D)} properties. 
+% \textbf{A} for atomicity.
+% This means a transactions appears to be processed instantaneous. \textbf{C} for consistency. This means that a consistent view of the system is always guaranteed.
+% \textbf{I} stands for isolation. If multiple thread work on the same data they do not influence each other indirectly. The only way threads can influence each other 
+% is by communicating through shared memory.
+% \textbf{D} stand for durability, but is relevant only for data base transactions. 
 
 There is a stable implementation for software transactions in Haskell, namely Software Transactional Memory (called STM in the following). The STM library provides 
 an interface which allows the user to process arbitrary operation on one element buffers (so called TVars). The operations can be grouped to \keyword{transactions}.

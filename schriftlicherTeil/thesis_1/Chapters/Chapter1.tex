@@ -44,7 +44,7 @@ main = do
 \end{minipage}
 
 The problem is the mutual access of the MVars. If both threads take their \code{src} at the same time, they will both wait for \code{dst}
-\footnote{In fact is \code{transfer acc1 acc1 50} enough to evoke a deadlock}. To avoid this deadlock we can rewrite the code:
+\footnote{In fact, \code{transfer acc1 acc1 50} is enough to evoke a deadlock}. To avoid this deadlock we can rewrite the code:
 \begin{lstlisting}
 transfer src dst am = do
   srcBal <- takeMVar src
@@ -54,7 +54,7 @@ transfer src dst am = do
 \end{lstlisting}
 This indeed solves the problem regarding the deadlock. In return we lose consistency. For a brief moment we see an inconsistent state. Since
 the amount is allready withdrawn from one account, but not yet deposited on the other account. This inconsistent state is observable by other 
-threads. This is not possible in the first implementation. 
+threads. It is not possible in the first implementation. 
 
 We can use STM to avoid both of these problems. STM provides a single element buffer named \code{TVar}. In contrast to an MVar, a 
 TVar always holds a value and is never empty. TVars are read and written with the functions \code{readTVar} and \code{writeTVar}, respectively. 
@@ -76,7 +76,7 @@ Note that \code{transfer} is no longer an \code{IO} action, but an \code{STM} ac
 similar to the MVar version.
 
 The function \code{atomically :: STM a -> IO a} is used in order to execute an STM action. 
-The following example contains no deadlock because \code{readTVar} and \code{writeTVar} do not lock the TVar:
+The following example contains no deadlock:
 \par\noindent
 \begin{minipage}[t]{.45\textwidth}
 Thread 1:
@@ -109,7 +109,7 @@ In the case of software transactions the \keyword{Durability} is not demanden, w
 for the rest of the thesis.
 
 These properties explain the name \code{atomically}, because the enclosed code appears to be executed instantaneously without any 
-interactions with other threads. If an STM action is executed via \code{atomically}, we call it a \keyword{transaction}.
+interactions with other threads.In the following any composition of \code{STM} actions is called \keyword{transaction}.
 Before we turn over to the implementation of STM, we take a deeper look at the interface of the STM.
 
 \code{newTVar :: a $\rightarrow$ STM (TVar a)} creates a newTVar. Since a TVar always holds a value, an initial value has to be
@@ -446,7 +446,7 @@ are executed in a sequential order. As mentioned before, this not desirable for 
 \centering
 \includegraphics{Figures/CriticalValue}
 \decoRule
-\caption[CriticalValue]{Time when the update of \code{acc1} or \code{acc2} causes a rollback.}
+\caption[Critical Value I]{Time when the update of \code{acc1} or \code{acc2} causes a rollback.}
 \label{fig:criticalValue}
 \end{figure}
 
@@ -484,7 +484,7 @@ execution of \code{readTVar} can reduce the time values are critical and by this
 \centering
 \includegraphics{Figures/CriticalValue2}
 \decoRule
-\caption[CriticalValue2]{Effect of rearranging code with regards to the time \code{acc1} and \code{acc2} are critical for \code{transaction1}.}
+\caption[Critical Value II]{Effect of rearranging code with regards to the time \code{acc1} and \code{acc2} are critical for \code{transaction1}.}
 \label{fig:criticalValue2}
 \end{figure}
 Our aim is to delay the execution of \code{readTVar} as far as possible to reduce to time that
