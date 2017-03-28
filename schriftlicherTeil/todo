@@ -1,5 +1,3 @@
-PHILOSOPHEN
-
 Lazy STM renaming?
 
 transaction vs STM action
@@ -14,13 +12,10 @@ Evaluation
         improve it!
 
 Abstract
-
-Achnowledgements 
+  rework it slightly 
 
 Future works
    Unnessary Recomputations
-   Exception Handling 
-     TVar may remain locked
 
 Appendix 
   Applicative

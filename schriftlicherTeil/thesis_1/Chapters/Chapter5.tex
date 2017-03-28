@@ -83,14 +83,21 @@ because reading in a locked context contains the risk of deadlocks. Avoiding the
 additional complexity to the implementation.
 
 The alternative implementation lacks a sufficient support for exceptions handling. If a exception is
-raised, this exception is thrown to the caller. This behaviour per se is not incorrect. If the 
+raised, this exception is thrown to the caller. This behaviour per se is not incorrect, but if the 
 exception is raised because the transaction has seen an inconsistent view of the memory, it is 
-incorrect. When the transaction raises an exception during the execution the implementation must 
+incorrect. When the transaction raises an exception during the execution, the implementation must 
 check whether the transaction is valid or invalid. If it is invalid the transaction have to be rolled 
 back, otherwise it is a violation of the consistency property. If the transaction is valid, the 
 behaviour is design decision. Either the transaction is raised to the caller or the transaction 
 handles the exception like a retry, meaning it waits for a change of the read TVars and restarts.
-Both execution paths preserve the ACI properties and thus would be legit. 
+Both execution paths preserve the ACI properties and thus would be legit. There are additional 
+technical problems with exceptions in the implementation. If an exception is raised during the 
+commit phase, no measures are performed to make sure the system 
+is still usable. If the transaction already locked several TVars and then raises an exception, this 
+exception is not catched and the locks for the TVars are not released. Thus it is possible that 
+the TVars remain locked. I am not sure if it is possible that an exception is raised at this point
+because only read and write operations on MVars and safe operations on the \code{IntMaps} are performed.
+Nevertheless it remains an unsolved problem.
 
 In \parencite{invariants} the authors introduce a new feature called \keyword{invariants} to STM.
 This allows the user to define invariants on the TVars that must be fulfilled before a transaction
