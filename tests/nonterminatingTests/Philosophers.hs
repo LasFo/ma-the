@@ -1,6 +1,7 @@
 
 import STM
 import Control.Concurrent
+import System.Random
 
 {-The most basic test case for synchronization tools:
  - The dining Philosophers-}
@@ -15,6 +16,7 @@ philosopher n sl sr = do
   randomDelay
   atomically $ takeStick sl >> takeStick sr
   putStrLn $ "Phil" ++ show n ++ ": eating..."
+  randomDelay
   atomically $ putStick sl >> putStick sr
   philosopher n sl sr
 
@@ -34,7 +36,7 @@ putStick :: Stick -> STM ()
 putStick = flip writeTVar True
 
 main = do 
-  sticks <- atomically $ seqeunce $ replicate philosophers (newTVar True)
+  sticks <- atomically $ sequence $ replicate philosophers (newTVar True)
   mapM_ forkIO $ makePhils philosophers sticks
   getLine
 
