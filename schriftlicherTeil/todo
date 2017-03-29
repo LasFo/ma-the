@@ -1,10 +1,9 @@
-Lazy STM renaming?
-
 transaction vs STM action
 
 Introduction
   Definitions
     clear definitions
+    external semantics
 
 Evaluation
   Results

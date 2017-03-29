@@ -176,7 +176,7 @@ of STM in Haskell.
 
 The reason this works is because always the whole transaction (\code{STM} action) is considered as one block for which
 the ACI properties must hold. Thus the user marks the critical section by defining them as one transaction and the 
-library ensures the correctness and deadlock freedom. The user only needs to think about which actions need to be 
+library ensures the correctness and deadlock freedom. The user only needs to think about which actions have to be 
 processed together. This is comparable to a lock based version with a single lock. Everytime the user wants to process a 
 critical section he takes the lock before this section and releases the lock afterwards. Then the critical section 
 are processed isolated and problems such as race conditions and lost updates do not occur. The performance on the
@@ -215,25 +215,25 @@ After the entry is created and added to the log, the actual value is returned.
 A call of \code{writeTVar} also looks up the associated TVar in the log. If it is present, the field \code{newValue} is 
 set to the value passed to writeTVar. If it is not present, a new entry is created. The \code{tvar} is the passed TVar and
 the \code{newValue} is the passed value and \code{expectedValue} is the actual value of that TVar. This is the other time 
-the actual mutable data structures are accessed in the computation phase. To enter the actucal value of the TVar at this
+the actual mutable data structures are accessed in the computation phase. Entering the actucal value of the TVar at this
 point is not needed to preserve the ACI properties. This is done to simplify the implementation at the risk of an additional
 rollback. On the other hand it is unusual to write a TVar that was not read before, because this means to overwrite the 
 value of a TVar and thus discarding the initial content of that TVar.
 
 This log fulfills two purposes. One purpose of the log is the use in the commit phase which is described in Section \ref{Sec:STMImplCommit}.
-The other is the interaction between \code{readTVar} and \code{writeTVar}. The \code{readTVar} operations are able to see the results 
-of preceding \code{writeTVar} operations in the log. Without the log \code{writeTVar} would need to access the actual TVar. This on the 
+The other is the interaction between \code{readTVar} and \code{writeTVar}. The \code{readTVar} operations are able to use the results 
+of preceding \code{writeTVar} operations. Without the log \code{writeTVar} would need to access the actual TVar. This on the 
 other hand implys that other transactions are able to see inconsistent intermediate states of the system;
 a violation of the ACI properties. It may seem unnecessary to read a TVar that the transaction itself wrote before.
 The transaction should know what it writes and thus does not need to access such TVars. Nevertheless there are two reasons 
 to allow it. The current implementation allow the user to combine all transactional actions in an arbitrary manner and 
-the library ensures (at compile time) that it works correctly. To restrict the user to only read TVars he has
+the library ensures (at compile time) that it works correctly. To restrict the user to only read TVars that he has
 not yet written, no longer allows the library to give this kind of guarantee at compile time; this contradicts
 the design concept of Haskell. The second reason is one of the core motivations of STM in Haskell: composability.
 With the restriction it is not possible to combine arbitrary correct STM functions to new more complex STM
 functions. 
 
-To understand how a log could look like, take a look at the following example:
+To understand how the log is constructed, take a look at the following example:
 \begin{lstlisting}
 transaction = do
   a <- readTVar t1
@@ -262,16 +262,16 @@ Aborting a transaction means to discard the log. Since no observable operations 
 As soon as at least one of the TVars in the log has changed, the transaction is restarted. If the transaction is restarted immediately and no 
 TVar has changed the transaction would reach the same \code{retry} again. These changes can be checked by comparing the \code{expectedValue} in
 the log with the actual value in the TVar. To avoid busy waiting the thread do not repeatedly check if the value has changed. The TVar has a 
-queue for wait waiting threads. Each time a transaction successfully commits and writes a TVar it also checks if there is someone waiting in 
+queue for waiting threads. Each time a transaction successfully commits and writes a TVar it also checks if there is someone waiting in 
 this queue. The committing thread then notifies all waiting threads.
 
 \code{orElse} on the other hand reacts differently on the the result that indicates a failure. The implementation works with nested transactions, 
 but to explain this in detail would go beyond the scope of this thesis. Nested transactions are not able to publish their writes on their own.
-When a nested transaction successfully commits(we see in the next section what this means), its log is integrated in the log of the surrounding transaction. 
+When a nested transaction successfully commits, its log is integrated in the log of the surrounding transaction. 
 Integrated means the logs are merged and in the case that there is a entry in both logs for one TVar, the entry of the outer transaction is discarded.
 If the nested transaction fails, because \code{retry} occurred and it is the first transaction of \code{orElse}, the log of the inner transaction
 is integrated in the log of the surrounding transaction, but the \code{newValue} fields of the inner log are ignored. If the nested transaction
-fails to validate the outermost transaction is rolled back.
+fails to validate (explained in the next section) the outermost transaction is rolled back.
 
 In conclusion the interface functions of STM are processed in the computation phase as follows:
 \begin{itemize}
@@ -287,20 +287,20 @@ In conclusion the interface functions of STM are processed in the computation ph
 After the log is calculated and no further STM actions need to be processed, the commit phase starts.
 At first the transaction checks if the values in its log are still correct by \keyword{validating} its log.
 Validation denotes the process to check if the expectedValues are equal to the actual values in the TVars.
-In other words for each entry in the log the transaction reads the actual TVar and compares the value with 
+In other words, for each entry in the log, the transaction reads the actual TVar and compares the value with 
 the \code{expectedValue} in the log. If at least one of these values does not match, the transaction is considered
-\keyword{invalid}. If the validation returns the transaction is instantaneously rolled back, by discarding the log 
+\keyword{invalid}. If the validation returns invalid the transaction is instantaneously rolled back, by discarding the log 
 and restart it computation. If all values match the the transaction is considered \keyword{valid}. If the validation
 returns valid, each entry in the log is processed. 
 
-If \code{expectedValue} differs from \code{newValue} the associated TVar is locked. The transaction has acquired all 
-locks it needs, it validates again. This seems a bit wasteful in terms of resources, but locking the TVars is considered
-an expensive operation and thus the implementation tries to avoid this when ever possible. This process reduces the chance
-that the transaction acquires all locks and then finds out it is invalid and consequently a unnecessary locking of TVars.
+If \code{expectedValue} differs from \code{newValue} the associated TVar is locked. When the transaction has acquired all 
+locks that it needs, it validates again. This seems wasteful in terms of resources, but locking the TVars is considered
+an expensive operation and thus the implementation tries to avoid this whenever possible. This process reduces the chance
+that the transaction acquires all locks and then finds out it is invalid; consequently a unnecessary locking of TVars.
 If the validation fails at this point, the transaction is rolled back after the locks has been released.
 If the transaction has acquired all locks and is valid the transaction is is ready to publish its changes.
-This means iterating on the log and update the actual TVars where \code{expectedValue} and \code{newValue} differ and
-simultaneously releasing the locks. 
+The transaction iterates on the log and updates the actual TVars where \code{expectedValue} and \code{newValue} differ. 
+Simultaneously the transaction releases the locks for the TVars. 
 
 If the validation returns invalid it means at least one \code{expectedValue} is no longer correct. To roll back is essential 
 to retain the ACI properties. The failed validation indicates that transaction has read an outdated value and possibly worked 
@@ -311,7 +311,7 @@ transaction = do
   writeTVar t1 (a+1)
 \end{lstlisting}
 If this transaction is processed by two transactions in parallel. Both would read the initial value of \code{t1}, say \code{1}.
-So both would note in their log \code{(t1,1,1)}. After the \code{writeTVar} the log of both transactions would look contain 
+So both would note in their log \code{(t1,1,1)}. After the \code{writeTVar} the log of both transactions contains 
 \code{(t1,1,2)}. After that both transactions try to commit. Assume one transaction commits before the other transaction tries.
 \footnote{For simplicity we assume that no other transaction is running besides the two we are looking at.}
 Then the transaction would find its log to be valid and lock \code{t1}. After that its log is still valid and so it modifies 
@@ -319,16 +319,15 @@ Then the transaction would find its log to be valid and lock \code{t1}. After th
 Then the second transaction tries to commit. Since the actual value hast changed to \code{2} it does no longer match 
 the \code{expectedValue} and the transaction is rolled back. If the transaction would not be rolled back at this point
 and commit instead. The transaction would write \code{2} to the TVar (that already contains \code{2}). In the end 
-this would means the value of \code{t1} is \code{2} after both transactions have finished. This is certainly not the 
+this means the value of \code{t1} is \code{2} after both transactions have finished. This is certainly not the 
 intended behaviour after incrementing the TVar that holds \code{1} twice. This is the well known \keyword{lost update}
 problem. 
-
 By rolling back the second transaction it reads \code{t1} once more. The log contains \code{(t1,2,2)} after the \code{readTVar}
 operation and \code{(t1,2,3)} after the \code{writeTVar} operation. Then the transaction validates, locks, validates and 
 finally publishes it modifications. In the end the value of \code{t1} is \code{3}; just as intended.
 
 \subsection{Notes on the Implementation}
-Larus and Rajwar describe in their book\parencite[Chapter 2]{transBook} different design options to be done when implementing a 
+Larus and Rajwar describe in their book\parencite[Chapter 2]{transBook} different design options of the implementation of a 
 (Software) Transactional Memory. While most of these options effect only the performance of a system, some also effect the 
 semantics of the system. We will discuss in this section the design options that are important for this thesis \footnote{The names used in the 
 following part are taken from \parencite[Chapter 2]{transBook}}.
@@ -344,13 +343,13 @@ and looking them up. Neither mechanism is better than the other in general; it d
 system is significantly higher than that of a deferred system, when reads outnumber writes by far.
 
 \subsubsection{Early and Late Conflict Detection} A STM system needs to detect conflicts in order to ensure the ACI properties. This can 
-be done as soon as the conflict occurs or later before the transaction commits. If the system uses a late conflict 
+either be done as soon as the conflict occurs or later before the transaction commits. If the system uses a late conflict 
 detection, transactions may work on an inconsistent state. This may lead to loops or exceptions. So this design decision is 
 relevant for the semantics. Haskell STM uses a late conflict detection. By validating the log before comitting the transaction a possible conflict
 is detected. This implies the transaction may work on an inconsistent state until it attempts to commit. This means the transaction 
 may run into an infinite loop, because it saw an inconsistent state. To avoid this problem, additional validations are performed
-each time the executing thread yields. Exceptions raised by the transaction are handled like a \code{retry}. If the log is valid,
-the transcation waits until at least one TVar changed. If it is invalid the transaction is restarted immediately.
+each time the executing thread yields. Exceptions raised in the transaction are handled like a like the following. If the log is valid,
+the transcation raises the exception to the caller. If it is invalid the transaction is restarted immediately.
 In conclusion, the user of STM can not observe that the transaction worked on an inconsistent state.
 
 \subsubsection{Synchronization} Another important property of a STM system is the way it synchronizes transactions. In order to validate
@@ -362,12 +361,12 @@ is rolled back when it tries to aquire the lock for a locked TVar. In the worst 
 however the chances are narrow. Rolling back the transaction seems to be harsh instead of waiting until the other transaction finishes 
 and then trying to commit, but if two transactions try to lock the same TVar, both transactions try to write this TVar. 
 This means at least one of the transactions is rolled back, since the TVar is logged with the old value. 
-Thus the first transaction to commit would modify a value in the log of the other transcation.
+Thus the first transaction to commit would modify a value. The other transaction then sees this update and rolls back.
 
 \subsubsection{Strong and Weak Isolation} When executing multiple transactions, STM is must be able to isolate these transactions.
 The ACI properties demand this. What happens if non transactional code work on the same shared data structures is up to the STM 
 implementation. If it isolates transactional and non transactional code, it is called strong isolation; otherwise, weak isolation.
-STM has limited possibilities to effect non transactional code. It is not possible to roll back such code. Either STM prevents 
+The STM library has limited possibilities to effect non transactional code. It is not possible to roll back such code. Either STM prevents 
 external accesses completely or it suspends external accesses until no transaction is using the shared data. STM in Haskell uses 
 the first approach. The only way to access TVars is to use the functions \code{readTVar} and \code{writeTVar}. The type system 
 ensures that every access to TVars is in an \code{STM} action. The only way to execute \code{STM} actions on the other hand is
@@ -399,7 +398,7 @@ transcation2 = do
     transfer acc2 acc1 50
 \end{lstlisting}
 \end{minipage}
-The implmentation is correct, but not verry efficient in this case. Take a look at the inlined functions to understand the 
+The implmentation is correct, but not very efficient in this case. Take a look at the inlined functions to understand the 
 problem:
 \par\noindent
 \begin{minipage}[t]{.45\textwidth}
@@ -430,15 +429,15 @@ performance deterioration rather than a performance improvement. Since we cannot
 this case. 
 
 The second case is that these transactions are run in parallel. This should be the better case, because the implementation
-has a chance to improve the performance. Sadly this is not the case. To understand why, we need to take a close look at 
+has a chance to improve the performance. Unfortunately this is not the case. To understand why, we need to take a close look at 
 the execution. Let us assume both threads execute their computation phase at the same time. This means both read the initial 
-values of \code{acc1} and \code{acc2} and add these information to their log. Furthermore add both transactions 
-entries for \code{writeTVar acc1} and \code{writeTVar acc2} to their log. Then both transactions try to commit, thus try to lock 
-the TVars. It is possible both transactions are rolled back at this point. Lets assume \code{transaction1} acquires the locks 
+values of \code{acc1} and \code{acc2} and add these information to their logs. Furthermore add both transactions 
+entries for \code{writeTVar acc1} and \code{writeTVar acc2} to their logs. Then both transactions try to commit, thus try to lock 
+the TVars. It is even possible that both transactions are rolled back at this point. Lets assume \code{transaction1} acquires the locks 
 for \code{acc1} and \code{acc2}. Since no TVars were modified after \code{transaction1} read them, it validates and commits.
 If \code{transaction2} tries to access the TVars before \code{transaction1} has finished committing, it is rolled back. 
 Thus it is possible for \code{transaction2} to read the old value once again. If \code{transaction2} is descheduled for the time
-\code{transaction1} commits, it is rolled back afterwards, because the values of \code{acc1} and \code{acc2} have were changed 
+\code{transaction1} commits, it is rolled back afterwards, because the values of \code{acc1} and \code{acc2} have changed 
 by \code{transaction1}. In conclusion no performance improvement was achieved. The most efficient execution is if both transactions
 are executed in a sequential order. As mentioned before, this not desirable for multithreaded programs.
 
@@ -457,12 +456,11 @@ This leads to two questions:
 \end{itemize}
 A transaction needs to be rolled back if it is operating on data that is not a snapshot of the current memory. In other words 
 if a value has changed after the transaction read this value. When a transaction reads a TVar, this TVar becomes 
-\keyword{critical} for the transaction. Critical means a modifications of that TVar causes the transaction to roll back.
+\keyword{critical}(see Section \ref{definitions}) for the transaction. Critical means a modifications of that TVar causes the transaction to roll back.
 Figure \ref{fig:criticalValue} visualizes when the TVars \code{acc1} and \code{acc2} are critical for \code{transaction1}.
 When \code{readTVar acc1} is executed the values becomes critical and stays critical until the transaction commits.
 If any other transaction commits a modification to \code{acc1} or \code{acc2}, while \code{acc1} and \code{acc2} are
-critical for \code{transaction1}, \code{transaction1} is rolled back to preserve the ACI properties. A solution other
-than the roll back is presented in \ref{Prob:UnRe}. 
+critical for \code{transaction1}, \code{transaction1} is rolled back to preserve the ACI properties. 
 
 This insight brings an intuitive way to deal with this problem. If we minimize the time the TVars are critical for
 a transaction we reduce the chance that this transaction is rolled back. 
@@ -477,7 +475,7 @@ transfer src dst am = do
   writeTVar dst (dstBal - am)
 \end{lstlisting}
 With this implementation of transfer the time in that both TVars are critical is reduced. Figure \ref{fig:criticalValue2}
-shows the effects of this for \code{transaction1}. The second TVar, namely \code{acc2}, is shorter critical than in the 
+shows the effects of this for \code{transfer acc1 acc2 50}. The second TVar, namely \code{acc2}, is shorter critical than in the 
 initial implementation. The time \code{acc1} is critical has not changed at all. Nevertheless it shows that delaying the
 execution of \code{readTVar} can reduce the time values are critical and by this the chance the transaction is rolled back.
 \begin{figure}
@@ -489,7 +487,7 @@ execution of \code{readTVar} can reduce the time values are critical and by this
 \end{figure}
 Our aim is to delay the execution of \code{readTVar} as far as possible to reduce to time that
 a TVar is critical for the transaction. We have already seen one option to achieve this; rearrange the 
-operations of a transaction. This would require a kind of preprocessing in the compiling process, for 
+operations of the transaction. This would require a kind of preprocessing in the compiling process, for 
 example a source to source code transformation. The aim of this thesis is to provide an pure Haskell
 library. I do not intend to implement an extension to the compiler nor do I 
 want to provide a source to source code transformer. The only other option is to alter implementation
@@ -497,9 +495,9 @@ of \code{readTVar} and \code{writeTVar} without changing the \keyword{external} 
 External semantics are the semantics the user can observe and which effect the user written code.
 
 The critical time would be minimal if the TVars were read directly before or at the start of the commit phase.
-This would mean the chances that another transaction commits a change to a TVar that is critical are low or non
+Then the chances that another transaction commits a change to a TVar that is critical are low or non
 existing. So the idea is to let the user define transactions like before, but changing the semantics of 
-\code{readTVar} that it is evaluated in the commit phase. The user is able to define transactions like with 
+\code{readTVar} that it is evaluated in the commit phase. As a result, the user is able to define transactions like in
 the original implementation, but the delay of the evaluation shortens the time TVar are critical and thus
 the chance a transaction is rolled back. 
 
@@ -541,7 +539,7 @@ parallel.
 Assume \code{transaction1} gets the locks first and tries to validate\footnote{You could argue that 
 evaluating \code{readTVar} operation is necessary before validating, but this would not change the validity of the 
 transaction, since the TVars are locked and can not be modified by other transactions at that point.}. 
-Since the readSet contains an action whose result is the current value, the validation is unnecessary; it is always valid.
+Since the log contains an action whose result is the current value, the validation is unnecessary; it is always valid.
 To validate the log, \code{a} and \code{b} are evaluated. At last the new values are written to the TVars.
 
 After \code{transaction1} finished and released the locks, \code{transaction2} aquires these locks
@@ -582,6 +580,7 @@ considerable amount of time when a transaction is rolled back. This means for th
 the entry for \code{acc1} from the log an execute the first two actions of transfer instead of all actions.
 
 \section{Terminology and Conventions}
+\label{definitions}
 To avoid miss understandings, we use this section to define the meaning of specific terms and explain code conventions.
 
 \subsubsection{Conflict}
