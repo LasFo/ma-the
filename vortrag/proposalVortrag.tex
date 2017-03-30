@@ -297,7 +297,7 @@ Log:
 
 
 \begin{frame}
- \frametitle{Critical TVar}
+ \frametitle{Critical TVars}
    \begin{itemize}\setlength\itemsep{1em}
     \item critical between read and commit
     \item modifications to critical TVars cause rollback
@@ -310,7 +310,7 @@ Log:
 
   
   \begin{frame}
-   \frametitle{Critical TVar}
+   \frametitle{Critical TVars}
    \begin{figure}
     \includegraphics[scale=0.7]{ressources/CriticalValue.pdf}
    \end{figure}
@@ -329,7 +329,7 @@ transfer = do
   
      
   \begin{frame}
-   \frametitle{Critical TVar}
+   \frametitle{Critical TVars}
    \begin{figure}
     \includegraphics[scale=0.7]{ressources/CriticalValue.pdf}
    \end{figure}
@@ -383,7 +383,7 @@ limitedTransfer src dst am = do
        \begin{itemize}
         \item if-then-else
         \item case
-        \item patternmatching
+        \item pattern matching
         \item guards
        \end{itemize}
     \item IO-actions $\Rightarrow$ not allowed in STM

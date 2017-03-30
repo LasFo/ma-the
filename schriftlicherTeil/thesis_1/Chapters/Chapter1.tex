@@ -197,10 +197,10 @@ The execution of a transaction (a call of \code{atomically}) is split in two pha
 \subsection{Computation Phase}
 Each transaction holds a log for the TVars that it has accessed. The log contains four elements per entry. These are: 
 \begin{itemize}
- \item tvar
- \item expectedValue
- \item newValue
- \item versionNumber
+ \item \code{tvar}
+ \item \code{expectedValue}
+ \item \code{newValue}
+ \item \code{versionNumber}
 \end{itemize}
 The \code{versionNumber} is only used to prevent a very subtle bug and thus not considered in this thesis. 
 The log is extended and modified by the transactional operations \code{writeTVar} and \code{readTVar}. \code{newTVar} on 
@@ -549,7 +549,7 @@ Both transactions run parallel as far as possible and did not roll back. Chapter
 presents the limitations of this idea and the challenges that arise when implementing it.
 
 \subsection{Unnecessary Recomputations}
-\label{Prob:UnRe} 	
+\label{/UnRe} 	
 While the first problem dealed with then question \textit{when} transactions need to be rolled back,
 the second problem investigates the question \textit{how} transactions are rolled back. Lets take a 
 look at our well known example:
@@ -600,16 +600,28 @@ schedule or a property of the source code. In the course of this thesis a deadlo
 is a static code property. A program contains a deadlock if there is a schedule that no systems progress is
 possible. 
 
+\subsubsection{External Semantics}
+The \textit{external} semantics of a program or function are the semantics that are \textbf{observable} from the 
+hightest level of granularity (the user level). Usually there
+is no need to distinguish internal and external semantics. This is only needed if the function is inspected on 
+different levels of granularity. The external semantics always refers to the semantics relevant for the user.
+In this thesis we need this differentiation because we inspect the STM library on two levels of granularity. 
+One is the user level, these are the external emantics. The other is the developer level, which we call 
+internal semantics. For example the external semantics of \code{writeTVar}:
+\textit{writes the passed value to the passed TVar}.
+The internal semantics on the other hand (in the original implementation) of \code{writeTVar}:
+\textit{logs the passed value as new value for the passed TVar}.
+
 \subsubsection{Code Conventions}
 In the code examples givin in this thesis, I often use undeclared variables for the sake of space.
 The type of these variables can usually be derived from the context. Nonetheless, for 
 clearity I will give a guideline for naming conventions. In many code examples \code{t1} and \code{t2} 
-are used to denote TVars. The type of these TVars depend on the context and is not important for the
+are used to denote TVars. The type of these TVars depend on the context, but is never important for the
 examples. The examples that refer to the bank accounts (\ref{STMInterface}) use \code{acc1} and 
 \code{acc2}. If \code{t1} or \code{t2} are used to denote transactions, this is always explicitly 
 noted in the text. \code{a} and \code{b} denote pure values and are usually introduced in the code.
 
 All code examples use the do-notation, which is syntactic sugar for the monadic functions \code{>>=} and 
-\code{>>}. In the text that explain the examples, we use \code{>>=} and \code{>>} nevertheless.
+\code{>>}. In the text that explain the examples, we use \code{>>=} and \code{>>} if needed.
 In case you are not familiar with do-notation, it is highly recommended to take a look at 
 \url{https://wiki.haskell.org/Keywords#do}.

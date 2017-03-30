@@ -123,6 +123,25 @@ validates before the commit phase. The GHC implementation uses the runtime syste
 in the computation phase to avoid these kinds of loops. A compiler integration of the alternative 
 implementation allows a similar mechanism.
 
+We introduced in Section \ref{Prob:UnRe} another problem of the GHC implementation \footnote{This 
+Problem is also present in the Project implementation and the alternative implementations.}: the way 
+transactions are rolled back. Regardless the reason a rollback is needed, the transaction starts all
+over. This includes that the transaction executes actions on TVars that have not changed. Unfortunately,
+I was not able to implement a suitable solution for this problem in the time of this thesis. The previously
+presented paper \parencite{checkpoint} had some success engaging this problem. To provide a similar 
+solution for Haskell may be possible by redefining the monadic operations \code{>>} and \code{>>=}. 
+The first step is to divide the transaction in the parts that are seperated by \code{>>} or \code{>>=} 
+(the single \textit{statements} of the do-notation). We call these parts chunks for now. The second step 
+is to deteremine which TVars are used in which chunks. \code{unsafePerformIO} can be used to do this. 
+\code{>>} and \code{>>=} both execute the first action. During this execution \code{unsafePerformIO} can
+be used to detect the values (and the associated TVars) that are needed to evaluate this chunk. In the
+end the transaction contains an ordered collection of pairs. Each pair consist of a chunk and a set of
+TVars that this chunk depends on. In the case the transaction is invalid it can be rolled back to the 
+earliest chunk that is still valid. This includes that every time the transaction logs a chunk and its 
+dependencies, the transaction also needs to backup the read/writeLog. Thus this implementation contains
+a lot of book keeping. It needs further research to decide whether this idea works correctly and if so
+whether it increases the performance despite the book keeping overhead.
+
 \section{Summary}
 In Chapter \ref{Chapter0} we gave a motivation for synchronization in general. To utilize multi-core
 processors and guarantee reactivity is mandatory for software nowadays. Multithreading is essential 

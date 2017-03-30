@@ -1,25 +1,50 @@
 % Appendix A
 
-\chapter{Frequently Asked Questions} % Main appendix title
+\chapter{Applicative} % Main appendix title
 
-\label{AppendixA} % For referencing this appendix elsewhere, use \ref{AppendixA}
+\label{Applicative} % For referencing this appendix elsewhere, use \ref{AppendixA}
 
-\section{How do I change the colors of links?}
+\section{All Started with Applicative}
+The thesis started with the observation that the rollback explained in section \ref{Prob:UnRo} is 
+unnecessary. It is a modify operation that does not depend on the actual value of the TVar. Thus 
+read the value, modify it and write it back is a imperative way of solving this task. In other 
+words, it is unnecessary to read the TVar during the computation phase, when the transaction does
+not branch on that value. At this point we did not see that it is not needed when its evaluation is
+not demanded. In order to avoid the rollback, we wanted a mechanism that prohibits the user from 
+branching on the value. The user should still be able to use that value to do pure computations and 
+write it to TVars. This allows the library to decide when the IO-read is evaluated. We decinded to 
+use Applicative\footnote{https://hackage.haskell.org/package/base-4.9.0.0/docs/Control-Applicative.html}.
+Applicative is comparable to Monad. Additionally did we change the type of 
+\code{writeTVar :: TVar a $\rightarrow$ STM a $\rightarrow$ STM ()}. This allows the following
+example: 
+\begin{lstlisting}
+inc tv = writeTVar tv $ 
+         pure (+1) <*> 
+         readTVar tv
+\end{lstlisting}
+We are able to modify the value of a TVar without \code{>>=}. Furthermore did we changed the interal
+semantics, that an IO-read is performed in either \code{>>=} or in the commit phase. It is not performed
+in \code{readTVar}. Thus if we read a TVar and use applicative operations instead of monadic operations,
+we do not risk a rollback. The value is evaluated in the commit phase, hence it is not critical at all.
+This approach avoids the intially mentioned rollback, but has its drawbacks. 
 
-The color of links can be changed to your liking using:
+The use of applicative operations is not as comfortable as monadic operations. One problem is the use of 
+multiple operators instead of just one. There is no suitable language feature such as the do-notation like 
+in the monadic version. We cannot use \code{ApplicativeDo} because the target
+of \code{ApplicativeDo} is something else\footnote{\code{ApplicativeDo}s aim is it to use applicative 
+operations to calculate an result and not to process a chain of operations. To understand the problem,
+we would need to understand the translation scheme of \code{ApplicativeDo} which goes beyond the scope of
+this thesis.}. Consequently, we need to use brackets or \code{\$} to group the actions. Another problem is  
+the reversed order of operations. In the monadic version, the operations are ordered like in an imperative
+language, for example: read $\rightarrow$ (+ 1) $\rightarrow$ write. This is easily comprehensible. The 
+applicative version uses a functional style, for example: write (1 + (read)). For this example it is 
+comprehensible, but you can imagine what happens if the actions increase in size. For every operation
+we introduce in the applicative version another nesting. This leads very fast to incomprehensible code,
+espeacially when using functions with more than one argument. The monadic version is just a chain of operation, 
+which can easily be extended. 
 
-{\small\verb!\hypersetup{urlcolor=red}!}, or
+In conclusion we gain performance for the costs of usability of the library; One of the biggest strength of
+STM. We solved one problem by introducing another problem. Nevertheless, I implemented a version of STM
+that uses this scheme and avoided the targeted rollbacks. To implement it, \code{IO ()} actions were used
+to delay the evaluation of \code{readTVar} operations. When \code{>>=} is executed this IO action is evaluated. 
 
-{\small\verb!\hypersetup{citecolor=green}!}, or
-
-{\small\verb!\hypersetup{allcolor=blue}!}.
-
-\noindent If you want to completely hide the links, you can use:
-
-{\small\verb!\hypersetup{allcolors=.}!}, or even better: 
-
-{\small\verb!\hypersetup{hidelinks}!}.
-
-\noindent If you want to have obvious links in the PDF but not the printed text, use:
-
-{\small\verb!\hypersetup{colorlinks=false}!}.

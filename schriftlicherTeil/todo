@@ -1,20 +1,16 @@
 transaction vs STM action
 
+Abstract
+  rework it slightly 
+
 Introduction
   Definitions
     clear definitions
-    external semantics
 
 Evaluation
   Results
     Scaling
         improve it!
-
-Abstract
-  rework it slightly 
-
-Future works
-   Unnessary Recomputations
 
 Appendix 
   Applicative
