@@ -5,25 +5,25 @@
 \label{Chapter3}
 
 We will now look upon the implementation of the aforementioned changes. Unlike to the original
-implementation this is not a C library, but a pure Haskell library. This brings some advantages 
+implementation this is not a C library but a pure Haskell library. This brings some advantages 
 and one disadvantages. The disadvantage is the performance as discussed in Chapter \ref{Chapter4}.
 For the costs of performance we gain a library that is easy to understand and extend. The original 
 implementation is interwoven with the GHC runtime environment. Some STM functions are evoked by 
 the scheduler to ensure the consistency. This makes the library sensitive to changes. 
-To ensure the correctness of such a library is significantly harder than the correctness of a pure library, since
+To ensure the correctness of such a library is significantly harder than for pure library, since
 the compiler does not aid this porcess. In other words, the devlopment of a pure library is safer
-and faster. \parencite{STMHigh} presented a high level Haskell implementation of STM. Their aim
+and faster. \parencite{STMHigh} presents a high level Haskell implementation of STM. Their aim
 was to provide a pure Haskell implementation that is equivalent to original implementation of 
 \parencite{STMBase}. Preceding this master thesis I optimized that implementation. I replaced
 internally used data structure and performed two changes to the internal semantics. First, 
 the initial high level implementation used a global lock to synchronize concurrent transactions.
 This coarse grained locking was substituted by a fine grained locking. Instead of a single
-global lock, each TVar holds its own lock and transactions acquire the minimum amaunt of 
-locks to commit. This prevents transactions that do not conflict to commit simultaneously.
+global lock, each TVar holds its own lock and transactions acquire the minimum amount of 
+locks to commit. This allows transactions that do not conflict to commit simultaneously.
 Second, I altered the conflict detection. The initial implementation used a validation process
 similar to the GHC implementation. Now each TVar has a queue associated. If a transaction reads 
-a TVar, it enters a reference to itself to this queue. If a transaction successfully commits a change to a TVar it 
-notifies all transactions in the associated queue. If a transaction is notified it is rolled back.
+a TVar, it enters a reference to itself to this queue. If a transaction successfully commits a change to a TVar, it 
+notifies all transactions in the associated queue. If a transaction is notified, it is rolled back.
 This way of conflict detection has the advantage that conflicts are detected earlier than before.
 This implementation is called the \keyword{Project implementation} in the following. Figure 
 \ref{fig:implementations} visualizes the development process of the libraries.

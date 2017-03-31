@@ -13,9 +13,8 @@ Evaluation
         improve it!
 
 Appendix 
-  Applicative
-    Uncomfortable
-    No sharing
   STMWSL
     Useless because readSet < writeSet
+  Prob:UnRe
 
+Description of the Repository

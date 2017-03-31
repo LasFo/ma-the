@@ -45,6 +45,72 @@ which can easily be extended.
 
 In conclusion we gain performance for the costs of usability of the library; One of the biggest strength of
 STM. We solved one problem by introducing another problem. Nevertheless, I implemented a version of STM
-that uses this scheme and avoided the targeted rollbacks. To implement it, \code{IO ()} actions were used
-to delay the evaluation of \code{readTVar} operations. When \code{>>=} is executed this IO action is evaluated. 
+that uses this scheme and avoided the targeted rollbacks. \code{IO ()} actions were used
+to delay the evaluation\footnote{This implementation did not use \code{unsafePerformIO}. It used monadic \code{IO} actions.}. 
+When \code{>>=} is executed these \code{IO} actions are evaluated. The \code{IO} actions are created by \code{readTVar}.
+Remember that \code{readTVar} creates an STM action. This action can either be used to bind it with \code{>>=} or it 
+can be used to write another TVar (the value may be modified after read and before written). If it is wrtten to a 
+TVar the \code{IO} action was logged and executed in the commit phase. This solution contained some problems.
+
+The question arised how we are able to execute and action and use it at the same time. We need to execute it to make sure 
+the correct value is the result of the action. This can either be the actual value of the TVar in a form of an \code{IO} 
+action or it is an \code{IO} action that is wirtten in the log. The following example would not work:
+\begin{lstlisting}
+swap t1 t2 = do
+  let a = readTVar t1
+  writeTVar t1 <*> readTVar t2
+  writeTVar t2 a
+\end{lstlisting}
+This swap function does not work, because the \code{readTVar} operation in the let expression is evaluated, when 
+\code{writeTVar t2 a} is evaluated. At this point the value of \code{t1} is no longer ins initial value, but the 
+value of \code{t2}. Hence in the end of the transaction both TVars contain the same value. To solve this problem
+we introduced the function \code{eval :: STM a -> STM (STM a)}. This funcion allows us to evaluate the an 
+\code{STM} action an us it at the same time. It first evaluates the \code{STM} action and then returns an 
+dummy action that has no side effects and returns the value the intial action would return at the point \code{eval}
+was called. For example:
+\begin{lstlisting}
+swap t1 t2 = do
+  act <- eval $ readTVar t1
+  writeTVar t1 <*> readTVar t2
+  writeTVar t2 act
+\end{lstlisting}
+This swap function is correct. The first action evaluates \code{readTVar t1} and creates an action that return 
+the same as \code{readTVar t1} at this point. This works for every \code{STM} action. Side effect evoked by the 
+action on the other hand are not evoked by the returned action. Side effect in the context \code{STM} are always 
+modifications of the \code{StmState}. However, the \code{eval} function also solved another problem. The following
+example is not possible without eval:
+\begin{lstlisting}
+double t1 t2 t3 = do 
+  act <- eval $ readTVar t1
+  writeTVar t2 act
+  writeTVar t3 act
+\end{lstlisting}
+It is not possible to write this example without evaluating the \code{readTVar t1} twice or using \code{eval}. 
+\code{eval} can be compared to \code{share}\footnote{https://hackage.haskell.org/package/explicit-sharing-0.9/docs/Control-Monad-Sharing.html}
+whichs allows explicit sharing for action results.
+
+Even though \code{eval} allows us to use a readTVar action twice, there are still problems. The previous example
+would creates log entries for \code{t2} and \code{t3} that both yield the same \code{IO} action. The \code{IO} 
+action that IO-reads \code{t1}. In the commit phase these action are evaluated. This includes that the actual 
+TVar is read twice because the action is present in two log entries. At the first glance it does not seem to
+be an issue, but also pure computation are duplicated as the following example emphasises:
+\begin{lstlisting}
+shareless t1 t2 t3 = do 
+  act <- eval $ pure sqrt <*> readTVar t1
+  writeTVar t2 act
+  writeTVar t3 act
+\end{lstlisting}
+In this example the pure function \code{sqrt} is also evaluated twice. This is necessary in general because the 
+IO-read (created by readTVar) could return different values depending on the time it is executed. For our case
+we know that this is not the case. Both IO-reads are performed in the commit phase. At this time the TVar t1 is 
+locked. Thus the actual value of \code{t1} cannot change (as long as we do not change it ourself). 
+
+The core problem is that Haskell do not allow sharing on \code{IO} actions drirectly. There is a way to enable 
+sharing on \code{IO} actions: \code{unsafePerformIO}. These actions are considered as pure values, 
+hence their results are shared as any other pure value in Haskell. While using using \code{unsafePerformIO}
+to implement the sharing in the applicative solution, we discovered that it can replace the whole need for 
+Applicative. Since the usability of the applicative solution was still worse than the usability of the 
+original implementation, we discarded the applicative implementation and created the implementation that
+is presented in the main part of this thesis.
+
 

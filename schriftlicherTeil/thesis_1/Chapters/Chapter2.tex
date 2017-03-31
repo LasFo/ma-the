@@ -6,14 +6,13 @@
 
 %----------------------------------------------------------------------------------------
 In this Chapter we will explore an Approach to handle the problem of \keyword{Unnecessary Rollbacks} described in \ref{Prob:UnRo}.
-Before we can understand the solution to this problem we need to specify the technical reason more precisely. 
-I was not able to find an satisfying solution for the problem of \keyword{Unnecessary Recomputations}, but it may 
-be possible, even though the overhead is significant higher than in the first case. However, we will investigate 
-the problem to identify and understand the challenges of this problem.
+Before we can understand a solution to this problem we need to analyze the technical reason more precisely. 
+I was not able to find an satisfying solution for the problem of \keyword{Unnecessary Recomputations}, but it should
+be possible as the discussion in the Chapter \ref{Chapter5} shows.
 
 \section{Unnecessary Rollbacks}
-Remember the idea given in \ref{Prob:UnRo}. We suggested to delay the evaluation of 
-readTVar operations to the commit phase rather than executing them immediately in the computation
+Remember the idea given in \ref{Prob:UnRo}. We suggested to delay the readTVar operations to the commit
+phase rather than executing them immediately in the computation
 phase. While the idea works for the example of a normal \code{transfer}, the idea does not work 
 for the following example:
 \begin{lstlisting}
@@ -26,7 +25,7 @@ limitedTransfer src dst am = do
             writeTVar dst (dstBal + am)
 \end{lstlisting}
 If we use this function, the result of \code{readTVar src} is needed in the computation phase and therefore 
-the evaluation cannot be delayed to the commit phase. The value is needed to decide on the condition of the 
+the evaluation cannot be delayed to the commit phase. The value is needed to decide the condition of the 
 \code{if} expression. To be exact the value is needed to determine the control flow. 
 
 This leads to the question whether there is a way to determine if the result of a \code{readTVar} effects the 
@@ -39,7 +38,7 @@ flow alters when the value is modified. The only way to guarantee the ACI proper
 transaction when the TVar is modified. Otherwise the consistency may be violated.
 
 If the library handles a value that is \textbf{not} used for branch conditions as if it were used for branch conditions, 
-it may loses performance, but preserves the correctness. We already know an example for this. When we introduced
+it may lose performance, but preserves the correctness. We already know an example for this. When we introduced
 STM in \ref{STMInterface}, we examined two transactions executing \code{transfer}. In \ref{Prob:UnRo} we detected
 that this would roll back at least one of these transactions. 
 
@@ -71,8 +70,9 @@ Branch features in Haskell are the following:
  \item guards in functions or case expressions
  \item pattermatching in functions
 \end{itemize}
-Whenever a value is passed to one of these constructs, the TVars that this value depends on are marked critical
-and the associated read operations are evaluated.
+Whenever a value is passed to one of these constructs, the associated TVars are marked critical
+and the affiliated read operations are evaluated. The \textit{associated TVar} are the TVar 
+that the value depends on. In other words, the TVars that must be read to determine the value.
 A value may depend on multiple TVars. Consider the following example:
 \begin{lstlisting}
 transaction =
@@ -95,7 +95,7 @@ multiple \code{readTVar} operations on the same TVar, the actual TVar is accesse
 
 At the end of the computation phase all reads that are needed to decide the control flow are evaluated. 
 %Interestingly this is exactly the case when Haskell demands the evaluation of the values. 
-All other reads that are not relevant for the control flow are not evaluated. 
+All other reads are not relevant for the control flow and thus not evaluated. 
 In the \code{transfer} example no \code{readTVar} is evaluated in the computation phase, because neither of the 
 TVars is used to decide the control flow.
 
@@ -103,12 +103,14 @@ Lets refrain from STM and concurrency for a second. This kind of evaluation is w
 are two cases where Haskell demands the evaluation of an expression\footnote{There are other cases where Haskell
 demand the evaluation, but these are user defined strictness annotation suchs as \code{seq} or \code{!} for strict 
 pattern matching or strict constructors. But these are not part of the actual semantics of Haskell.}. 
-The first is, if Haskell needs the value
-to execute an IO action such as \code{print}. The second is, if the value is needed to decide a branch condition.
+The first is, if Haskell needs the value to execute a forreign function such as \code{putChar}.
+IO actions often contain calls to foreign functions. Although it is not necessary that an IO action calls a 
+foreing function and evaluates its subexpressions, every IO action potentially evaluates its subexpressions. 
+The second is, if the value is needed to decide a branch condition.
 
 STM is an abstraction that allows us to use sequential programming in a concurrent context. So we can use the 
 same evaluation strategy as in the sequential context. Even if the syntax suggests it, we do not explicitly
-specify when the TVars is read. We just specify where a value comes from and the evaluation is handled by the 
+specify when a TVar is read. We just specify the origin of the value and the evaluation is handled by the 
 underlying system. Since the computation phase is processed in the STM monad, there are no IO actions allowed.  
 This implies the only time we need to evaluate an expression is when we need to decide a branch condition. 
 Everytime we execute other computations on TVar values and write them back or return them, this is not executed 
@@ -127,18 +129,17 @@ The TVar \code{acc2} is not critical at any point in the transaction, because it
 flow. \code{acc1} on the other hand becomes critical at the time its value is used to evaluate the branch
 condition \code{(srcBal < am)}.
 
-When the commit phase starts some reads are evaluated and some reads are unevaluated. Before the remaining
-reads are evaluated the transaction locks all TVars that it has modified. Chapter \ref{Chapter3} explains that it 
+When the commit phase starts some reads are evaluated and some are unevaluated. Before the remaining
+reads are evaluated the transaction acquires all locks for TVars it has modified. Chapter \ref{Chapter3} explains that it 
 is enough to lock the TVars that are modfied instead of all TVars that were accessed. Then the transaction is validated.
 This validation is similar to the validation in the original implementation; it is a comparision between
 the values in the log (the TVars that the transaction needed to read to determine the control flow) and
 the current values of these TVars. If all values match, the transaction is valid, otherwise it is invalid.
 An invalid transaction is rolled back immediately after the locks are released. If the transaction is
-valid, it finally executes the remaining \code{readTVar} operation in order to modify the 
-actual TVars and determine return value of the transaction. Then the modifications the transaction 
+valid, it finally executes the remaining \code{readTVar} operations in order to modify the 
+actual TVars and determine the return value of the transaction. Then the modifications the transaction 
 performed are committed to actual TVars. By committing the modifications the old values in the TVar are 
-overwritten. This is the reason the \code{readTVar} operations can not 
-be delayed longer. 
+overwritten. This is the reason the \code{readTVar} operations can not be delayed any longer. 
 Parallel to writing the actual TVars, the locks for these TVars are released. The last step of the transaction 
 is to return the result. 
 
