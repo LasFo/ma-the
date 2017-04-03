@@ -109,7 +109,7 @@ In the case of software transactions the \keyword{Durability} is not demanden, w
 for the rest of the thesis.
 
 These properties explain the name \code{atomically}, because the enclosed code appears to be executed instantaneously without any 
-interactions with other threads.In the following any composition of \code{STM} actions is called \keyword{transaction}.
+interactions with other threads. In the following any composition of \code{STM} actions is called \keyword{transaction}.
 Before we turn over to the implementation of STM, we take a deeper look at the interface of the STM.
 
 \code{newTVar :: a $\rightarrow$ STM (TVar a)} creates a newTVar. Since a TVar always holds a value, an initial value has to be
@@ -174,7 +174,7 @@ readability of the code. In addition it increases the efficiency of the developm
 that was already found to be correct. This was also one of the main motivations for the paper \parencite{STMBase} which forms the foundation
 of STM in Haskell. 
 
-The reason this works is because always the whole transaction (\code{STM} action) is considered as one block for which
+The reason this works is because always the whole transaction is considered as one block for which
 the ACI properties must hold. Thus the user marks the critical section by defining them as one transaction and the 
 library ensures the correctness and deadlock freedom. The user only needs to think about which actions have to be 
 processed together. This is comparable to a lock based version with a single lock. Everytime the user wants to process a 
@@ -581,47 +581,69 @@ the entry for \code{acc1} from the log an execute the first two actions of trans
 
 \section{Terminology and Conventions}
 \label{definitions}
-To avoid miss understandings, we use this section to define the meaning of specific terms and explain code conventions.
+To avoid misunderstandings, we use this section to define the meaning of specific terms and explain code conventions.
 
 \subsubsection{Conflict}
 A \keyword{conflict} in STM is if two transactions access the same TVar in the following way. Transaction \code{t1} reads 
-the TVar. After \code{t1} has read the TVar and before it has commited, transaction \code{t2} successfully commits a modification 
-to this TVar. This means that \code{t1} works with an outdated value. In order to provide the ACI properties an STM system 
-needs to \keyword{detect} conflicts and resolve them, usually with rollbacks. 
+the TVar. After \code{t1} has read the TVar and before it has commited, transaction \code{t2} writes this TVar (calls \code{writeTVar}). 
+This means that \code{t1} works with an outdated value after \code{t2} commits. In the current implementation
+conflict are not detected until both, \code{t1} and \code{t2}, try to commit. If only \code{t1} commits, it does not 
+know that \code{t2} has written the TVar. If only \code{t2} commits, it does not know that \code{t1} has read this TVar.
+This allows both transactions to commit without rolling back either of them, if \code{t1} commit before \code{t2} (and \code{t1}
+does not wirte any TVar that \code{t2} has accessed). If \code{t2} commit first, the conflict is detected when \code{t1} commits
+and resolved by rolling back \code{t1}.
 
 \subsubsection{Critical TVar}
 A TVar is \keyword{critical} for a transaction \code{t1} if a modification to this TVars causes \code{t1} to roll back. In the current
-implementation each time a transaction executes \code{readTVar}, the read TVar becomes critical for this transaction. 
-In other words a TVar is critical for transaction \code{t1} if a modification to this TVar causes a conflict for \code{t1}.
+implementation, each time a transaction executes \code{readTVar}, the read TVar becomes critical for this transaction. Note that the
+time a TVar is critical for a transaction depends heavily on the implementation of STM. 
 
 \subsubsection{Deadlock}
 The term \keyword{deadlock} is defined in different ways in literature. A deadlock is either a specific
 schedule or a property of the source code. In the course of this thesis a deadlock
-is a static code property. A program contains a deadlock if there is a schedule that no systems progress is
-possible. 
+is a static code property. We assume that a thread is either \code{active}, \code{ready} or \code{suspended}.
+If the thread is \code{suspended}, it waits for an external signal to swap to the \code{ready} state. If it
+is ready the scheduler is allowed to swap this thread to \code{running} which grants the thread access to
+the CPU. If the thread executes specific operation (for example the semaphore operation \code{P}) it enters 
+the state suspended. Otherwise it is up to the scheduler to swap the thread to the \code{ready} state and
+take away the access to the CPU. With kind of system, a deadlock is defined as follows:
+A program contains a deadlock if there is a schedule that all threads are suspended.
 
 \subsubsection{External Semantics}
 The \textit{external} semantics of a program or function are the semantics that are \textbf{observable} from the 
-hightest level of granularity (the user level). Usually there
+hightest level of granularity. Usually there
 is no need to distinguish internal and external semantics. This is only needed if the function is inspected on 
 different levels of granularity. The external semantics always refers to the semantics relevant for the user.
 In this thesis we need this differentiation because we inspect the STM library on two levels of granularity. 
-One is the user level, these are the external emantics. The other is the developer level, which we call 
+One is the user level. The other is the developer level, which we call 
 internal semantics. For example the external semantics of \code{writeTVar}:
 \textit{writes the passed value to the passed TVar}.
 The internal semantics on the other hand (in the original implementation) of \code{writeTVar}:
-\textit{logs the passed value as new value for the passed TVar}.
+\textit{logs the passed value as newValue for the passed TVar}.
+
+\subsubsection{STM Action and Transaction}
+There is no difference between an STM action and a transaction. Every STM action can be executed with 
+atomically and thus is a transaction. There ma be exceptions, but I use the term transaction to denote
+an STM action that is supposed to be executed with \code{atomically}. I use the term \code{STM} action
+to speak about parts of transactions. For example:
+\begin{lstlisting}
+withdraw src am = do
+  balSrc <- takeMVar src
+  putMVar src (balSrc - am)
+\end{lstlisting}
+\code{withdraw acc1 50} is a transaction, but \code{balSrc <- takeMVar src} is an STM action. From the perspective
+of Haskells type system there is no differnce between these two parts. This is a convention not a definition. 
 
 \subsubsection{Code Conventions}
 In the code examples givin in this thesis, I often use undeclared variables for the sake of space.
 The type of these variables can usually be derived from the context. Nonetheless, for 
 clearity I will give a guideline for naming conventions. In many code examples \code{t1} and \code{t2} 
 are used to denote TVars. The type of these TVars depend on the context, but is never important for the
-examples. The examples that refer to the bank accounts (\ref{STMInterface}) use \code{acc1} and 
+examples. The examples that refer to the bank accounts (Section \ref{STMInterface}) use \code{acc1} and 
 \code{acc2}. If \code{t1} or \code{t2} are used to denote transactions, this is always explicitly 
-noted in the text. \code{a} and \code{b} denote pure values and are usually introduced in the code.
+noted in the text. \code{a} and \code{b} denote pure values and are always introduced in the code.
 
 All code examples use the do-notation, which is syntactic sugar for the monadic functions \code{>>=} and 
-\code{>>}. In the text that explain the examples, we use \code{>>=} and \code{>>} if needed.
-In case you are not familiar with do-notation, it is highly recommended to take a look at 
-\url{https://wiki.haskell.org/Keywords#do}.
+\code{>>}. In the text that explain the examples, we refer to \code{>>=} instead of $\leftarrow$.
+In case you are not familiar with do-notation, it is highly recommended to take a look at the translation
+of do-notation to monadic operators, for example: \url{https://en.wikibooks.org/wiki/Haskell/do_notation}.

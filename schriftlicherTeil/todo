@@ -1,20 +1,14 @@
-transaction vs STM action
-
-Abstract
-  rework it slightly 
-
-Introduction
-  Definitions
-    clear definitions
-
-Evaluation
-  Results
-    Scaling
-        improve it!
-
 Appendix 
   STMWSL
     Useless because readSet < writeSet
-  Prob:UnRe
+      iterating over all TVars twice
+      double validation
+      bugged because readSet is not validated (and empty in my test)
+         validation of the readSet would lead to a deadlock because
+         the readSet may contain TVar in the writeSet of another
+         transaction and vice versa
+
+Conclusion
+  Think about an imporovement
 
 Description of the Repository

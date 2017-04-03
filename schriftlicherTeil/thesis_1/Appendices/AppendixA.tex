@@ -102,10 +102,10 @@ shareless t1 t2 t3 = do
 \end{lstlisting}
 In this example the pure function \code{sqrt} is also evaluated twice. This is necessary in general because the 
 IO-read (created by readTVar) could return different values depending on the time it is executed. For our case
-we know that this is not the case. Both IO-reads are performed in the commit phase. At this time the TVar t1 is 
+we know that this is not the case. Both IO-reads are performed in the commit phase. At this time the TVar \code{t1} is 
 locked. Thus the actual value of \code{t1} cannot change (as long as we do not change it ourself). 
 
-The core problem is that Haskell do not allow sharing on \code{IO} actions drirectly. There is a way to enable 
+The core problem is that Haskell does not allow sharing on \code{IO} actions drirectly. There is a way to enable 
 sharing on \code{IO} actions: \code{unsafePerformIO}. These actions are considered as pure values, 
 hence their results are shared as any other pure value in Haskell. While using using \code{unsafePerformIO}
 to implement the sharing in the applicative solution, we discovered that it can replace the whole need for 

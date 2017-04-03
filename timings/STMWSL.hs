@@ -176,7 +176,7 @@ atomically stmAction = do
               mapM_ (flip seq (return ())) (uEReads newState)
               rSet <- readIORef $ readSet newState
               (writer,unlocks,valids) <- write (writeSet newState) rSet
-              val <- validate $ IntMap.elems $ IntMap.difference rSet (writeSet newState)
+              val <- validate $ IntMap.elems $ IntMap.difference rSet (writeSet newState) --noop 
               if val && valids
                  then do notifys newState
                          writer
@@ -226,6 +226,7 @@ write :: IntMap.IntMap (Maybe (), Maybe (),MVar(IORef ())) ->
          IO (IO (),IO (),Bool)
 write ws rs = do
     (writes, locks) <- readWS (IntMap.toList ws) 
+    print $ IntMap.size ws
     (unlocks,valids) <- process locks (IntMap.toList rs)
     return (writes, unlocks, valids)
   where replace mv val = do ioRef <- newIORef val

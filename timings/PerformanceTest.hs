@@ -7,8 +7,8 @@ import qualified Data.IntMap.Strict as IM
 import Data.Maybe (fromJust)
 --import Control.Concurrent.STM
 --import STMP
-import STMLA
---import STMWSL
+--import STMLA
+import STMWSL
 import System.Environment
 
 

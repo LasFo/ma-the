@@ -125,7 +125,7 @@ implementation allows a similar mechanism.
 
 We introduced in Section \ref{Prob:UnRe} another problem of the GHC implementation \footnote{This 
 Problem is also present in the Project implementation and the alternative implementations.}: the way 
-transactions are rolled back. Regardless the reason a rollback is needed, the transaction starts all
+transactions are rolled back. Regardless the reason for a rollback, the transaction starts all
 over. This includes that the transaction executes actions on TVars that have not changed. Unfortunately,
 I was not able to implement a suitable solution for this problem in the time of this thesis. The previously
 presented paper \parencite{checkpoint} had some success engaging this problem. To provide a similar 

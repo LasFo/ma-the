@@ -459,7 +459,7 @@ If the result of the action is
 the \code{Just} constructor. This is done by the partial function \code{fromJust}. The
 implementation ensure that \code{Nothing} can never occur and thus the call to 
 \code{fromJust} is safe. After the value is extracted, it is applied to the passed 
-function. This application results in a \code{STM} action. To gain \code{StmResult} as 
+function. This application results in an \code{STM} action. To gain the \code{StmResult} as 
 the result of the function the \code{newState} is applied to the action.
 Thanks to the laziness of Haskell the call to \code{fromJust} is not evaluated 
 immediately. This is the key of this implementation, since we avoid the evaluation of 
