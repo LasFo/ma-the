@@ -2,9 +2,8 @@
 
 \chapter{Applicative} % Main appendix title
 
-\label{Applicative} % For referencing this appendix elsewhere, use \ref{AppendixA}
+\label{AppendixA} % For referencing this appendix elsewhere, use \ref{AppendixA}
 
-\section{All Started with Applicative}
 The thesis started with the observation that the rollback explained in section \ref{Prob:UnRo} is 
 unnecessary. It is a modify operation that does not depend on the actual value of the TVar. Thus 
 read the value, modify it and write it back is a imperative way of solving this task. In other 
@@ -54,7 +53,7 @@ TVar the \code{IO} action was logged and executed in the commit phase. This solu
 
 The question arised how we are able to execute and action and use it at the same time. We need to execute it to make sure 
 the correct value is the result of the action. This can either be the actual value of the TVar in a form of an \code{IO} 
-action or it is an \code{IO} action that is wirtten in the log. The following example would not work:
+action or it is an \code{IO} action that is written in the log. The following example would not work:
 \begin{lstlisting}
 swap t1 t2 = do
   let a = readTVar t1

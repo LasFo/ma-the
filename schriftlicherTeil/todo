@@ -1,12 +1,4 @@
-Appendix 
-  STMWSL
-    Useless because readSet < writeSet
-      iterating over all TVars twice
-      double validation
-      bugged because readSet is not validated (and empty in my test)
-         validation of the readSet would lead to a deadlock because
-         the readSet may contain TVar in the writeSet of another
-         transaction and vice versa
+Vortragsdatum auf Folie 1 aendern
 
 Conclusion
   Think about an imporovement

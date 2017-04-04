@@ -590,7 +590,7 @@ This means that \code{t1} works with an outdated value after \code{t2} commits. 
 conflict are not detected until both, \code{t1} and \code{t2}, try to commit. If only \code{t1} commits, it does not 
 know that \code{t2} has written the TVar. If only \code{t2} commits, it does not know that \code{t1} has read this TVar.
 This allows both transactions to commit without rolling back either of them, if \code{t1} commit before \code{t2} (and \code{t1}
-does not wirte any TVar that \code{t2} has accessed). If \code{t2} commit first, the conflict is detected when \code{t1} commits
+does not write any TVar that \code{t2} has accessed). If \code{t2} commit first, the conflict is detected when \code{t1} commits
 and resolved by rolling back \code{t1}.
 
 \subsubsection{Critical TVar}

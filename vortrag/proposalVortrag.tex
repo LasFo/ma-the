@@ -134,24 +134,17 @@ atomically $
    \frametitle{Transactional Log}
    \begin{itemize}\setlength\itemsep{1em}
     \item one log per transaction
-    \item necessary for consistency
     \item three elements per log entry
           \begin{itemize}
            \item \code{TVar}
            \item \code{expectedValue}
            \item \code{currentValue}
           \end{itemize}
+    \item \textbf{writeTVar}: updates \code{currentValue} in log entry
+    \item \textbf{readTVar}: reads TVar from log or actual TVar
    \end{itemize}
   \end{frame}
   
-  \begin{frame}
-   \frametitle{Modify Operations}
-   \begin{itemize}\setlength\itemsep{1em}
-    \item \textbf{newTVar}: creates a new, initialized TVar 
-    \item \textbf{writeTVar}: updates \textit{currentValue} in log entry
-    \item \textbf{readTVar}: reads TVar from log or actual TVar
-  \end{itemize}
-\end{frame}
   
 \begin{frame}[fragile]
 \frametitle{Example}
@@ -319,11 +312,11 @@ Log:
 \begin{frame}[fragile]
 \frametitle{Idea}
 \begin{lstlisting}
-transfer = do 
-  a1 <- readTVar acc2
-  writeTVar acc2 (a1 - 50)
-  a2 <- readTVar acc1
-  writeTVar acc1 (a2 + 50)
+transfer src dst am = do 
+  srcBal <- readTVar src
+  writeTVar src (srcBal - am)
+  dstBal <- readTVar dst
+  writeTVar dst (dstBal + am)
 \end{lstlisting}
 \end{frame}
   
@@ -351,12 +344,12 @@ transfer = do
    \frametitle{Idea does not work}
    \begin{lstlisting}[language=Haskell]
 limitedTransfer src dst am = do
-   a1 <- readTVar src
-   if a1 < am
+   srcBal <- readTVar src
+   if srcBal < am
      then return ()
-     else do a2 <- readTVar dst
-             writeTVar src (a1 - am)
-             writeTVar dst (a2 + am)
+     else do dstBal <- readTVar dst
+             writeTVar src (srcBal - am)
+             writeTVar dst (dstBal + am)
    \end{lstlisting}
    \vfill
    $\Rightarrow$ idea does not work because the value is needed.
@@ -386,24 +379,24 @@ limitedTransfer src dst am = do
         \item pattern matching
         \item guards
        \end{itemize}
-    \item IO-actions $\Rightarrow$ not allowed in STM
+    \item foreign functions in IO $\Rightarrow$ not allowed in STM
    \end{itemize}
   \end{frame}
   
   \begin{frame}
     \frametitle{Example}
-    \lstinputlisting{ressources/accountTVar.hs}   
+    \lstinputlisting[firstline=2]{ressources/accountTVar.hs}   
   \end{frame}
   
   \begin{frame}[fragile]
    \frametitle{Example: limitedTransfer acc1 acc2 5}
    \begin{lstlisting}[language=Haskell]
-a1 <- readTVar acc1
-if a1 < 5
+srcBal <- readTVar acc1
+if srcBal < 5
   then return ()
-  else do a2 <- readTVar acc2
-          writeTVar acc1 (a1 - am)
-          writeTVar acc2 (a2 + am)
+  else do dstBal <- readTVar acc2
+          writeTVar acc1 (srcBal - am)
+          writeTVar acc2 (dstBal + am)
    \end{lstlisting}
    \pause
    \begin{figure}
@@ -420,37 +413,25 @@ if a1 < 5
   \begin{itemize}\setlength\itemsep{1em}
    \item pure Haskell implementation
    \item state monad
+   \begin{itemize}
+    \item read log
+    \item write log
+    \item unevaluated reads
+   \end{itemize}
    \item computation phase modifies the state 
    \item commit phase uses state to validate and commit
   \end{itemize}
   \end{frame}
 
-  \begin{frame}
-  \frametitle{State}
-  \begin{itemize}\setlength\itemsep{1em}
-   \item read log
-   \item write log
-   \item unevaluated reads
-  \end{itemize}
-  \end{frame}
-
   
   \begin{frame}
-  \frametitle{writeTVar}
+  \frametitle{readTVar}
   \begin{itemize}\setlength\itemsep{1em}
    \item search TVar in write log
+   \vfill
    \item \code{readTVar} creates an read expression and extends write log
    \item \code{unsafePerformIO} :: IO a $\rightarrow$ a 
    \item IO action logs the information in read log
-  \end{itemize}
-  \end{frame}
-
-  \begin{frame}
-  \frametitle{Computation Phase}
-  \begin{itemize}\setlength\itemsep{1em}
-   \item \code{writeTVar} modifies write log
-   \item \code{newTVar} does not access the state
-   \item computation phase is evaluation of the STM action 
   \end{itemize}
   \end{frame}
 
