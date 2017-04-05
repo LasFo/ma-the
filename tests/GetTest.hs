@@ -2,7 +2,7 @@ module GetTest where
 
 import STM
 import System.IO.Unsafe
-
+import Control.Applicative
 
 main = do 
   putStrLn "Desired outputs are given per transaction."

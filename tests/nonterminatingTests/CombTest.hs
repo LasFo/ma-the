@@ -2,6 +2,7 @@ import Control.Concurrent (forkIO, threadDelay)
 import STM
 import Data.List (sort)
 import qualified Data.Traversable as T
+import Control.Applicative 
 
 --Test case where a number of tvars is created.
 --For each tvars a thread is created which increments this

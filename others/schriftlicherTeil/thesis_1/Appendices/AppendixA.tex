@@ -1,0 +1,115 @@
+% Appendix A
+
+\chapter{Applicative} % Main appendix title
+
+\label{AppendixA} % For referencing this appendix elsewhere, use \ref{AppendixA}
+
+The thesis started with the observation that the rollback explained in section \ref{Prob:UnRo} is 
+unnecessary. It is a modify operation that does not depend on the actual value of the TVar. Thus 
+read the value, modify it and write it back is a imperative way of solving this task. In other 
+words, it is unnecessary to read the TVar during the computation phase, when the transaction does
+not branch on that value. At this point we did not see that it is not needed when its evaluation is
+not demanded. In order to avoid the rollback, we wanted a mechanism that prohibits the user from 
+branching on the value. The user should still be able to use that value to do pure computations and 
+write it to TVars. This allows the library to decide when the IO-read is evaluated. We decinded to 
+use Applicative\footnote{https://hackage.haskell.org/package/base-4.9.0.0/docs/Control-Applicative.html}.
+Applicative is comparable to Monad. Additionally did we change the type of 
+\code{writeTVar :: TVar a $\rightarrow$ STM a $\rightarrow$ STM ()}. This allows the following
+example: 
+\begin{lstlisting}
+inc tv = writeTVar tv $ 
+         pure (+1) <*> 
+         readTVar tv
+\end{lstlisting}
+We are able to modify the value of a TVar without \code{>>=}. Furthermore did we changed the interal
+semantics, that an IO-read is performed in either \code{>>=} or in the commit phase. It is not performed
+in \code{readTVar}. Thus if we read a TVar and use applicative operations instead of monadic operations,
+we do not risk a rollback. The value is evaluated in the commit phase, hence it is not critical at all.
+This approach avoids the intially mentioned rollback, but has its drawbacks. 
+
+The use of applicative operations is not as comfortable as monadic operations. One problem is the use of 
+multiple operators instead of just one. There is no suitable language feature such as the do-notation like 
+in the monadic version. We cannot use \code{ApplicativeDo} because the target
+of \code{ApplicativeDo} is something else\footnote{\code{ApplicativeDo}s aim is it to use applicative 
+operations to calculate an result and not to process a chain of operations. To understand the problem,
+we would need to understand the translation scheme of \code{ApplicativeDo} which goes beyond the scope of
+this thesis.}. Consequently, we need to use brackets or \code{\$} to group the actions. Another problem is  
+the reversed order of operations. In the monadic version, the operations are ordered like in an imperative
+language, for example: read $\rightarrow$ (+ 1) $\rightarrow$ write. This is easily comprehensible. The 
+applicative version uses a functional style, for example: write (1 + (read)). For this example it is 
+comprehensible, but you can imagine what happens if the actions increase in size. For every operation
+we introduce in the applicative version another nesting. This leads very fast to incomprehensible code,
+espeacially when using functions with more than one argument. The monadic version is just a chain of operation, 
+which can easily be extended. 
+
+In conclusion we gain performance for the costs of usability of the library; One of the biggest strength of
+STM. We solved one problem by introducing another problem. Nevertheless, I implemented a version of STM
+that uses this scheme and avoided the targeted rollbacks. \code{IO ()} actions were used
+to delay the evaluation\footnote{This implementation did not use \code{unsafePerformIO}. It used monadic \code{IO} actions.}. 
+When \code{>>=} is executed these \code{IO} actions are evaluated. The \code{IO} actions are created by \code{readTVar}.
+Remember that \code{readTVar} creates an STM action. This action can either be used to bind it with \code{>>=} or it 
+can be used to write another TVar (the value may be modified after read and before written). If it is wrtten to a 
+TVar the \code{IO} action was logged and executed in the commit phase. This solution contained some problems.
+
+The question arised how we are able to execute and action and use it at the same time. We need to execute it to make sure 
+the correct value is the result of the action. This can either be the actual value of the TVar in a form of an \code{IO} 
+action or it is an \code{IO} action that is written in the log. The following example would not work:
+\begin{lstlisting}
+swap t1 t2 = do
+  let a = readTVar t1
+  writeTVar t1 <*> readTVar t2
+  writeTVar t2 a
+\end{lstlisting}
+This swap function does not work, because the \code{readTVar} operation in the let expression is evaluated, when 
+\code{writeTVar t2 a} is evaluated. At this point the value of \code{t1} is no longer ins initial value, but the 
+value of \code{t2}. Hence in the end of the transaction both TVars contain the same value. To solve this problem
+we introduced the function \code{eval :: STM a -> STM (STM a)}. This funcion allows us to evaluate the an 
+\code{STM} action an us it at the same time. It first evaluates the \code{STM} action and then returns an 
+dummy action that has no side effects and returns the value the intial action would return at the point \code{eval}
+was called. For example:
+\begin{lstlisting}
+swap t1 t2 = do
+  act <- eval $ readTVar t1
+  writeTVar t1 <*> readTVar t2
+  writeTVar t2 act
+\end{lstlisting}
+This swap function is correct. The first action evaluates \code{readTVar t1} and creates an action that return 
+the same as \code{readTVar t1} at this point. This works for every \code{STM} action. Side effect evoked by the 
+action on the other hand are not evoked by the returned action. Side effect in the context \code{STM} are always 
+modifications of the \code{StmState}. However, the \code{eval} function also solved another problem. The following
+example is not possible without eval:
+\begin{lstlisting}
+double t1 t2 t3 = do 
+  act <- eval $ readTVar t1
+  writeTVar t2 act
+  writeTVar t3 act
+\end{lstlisting}
+It is not possible to write this example without evaluating the \code{readTVar t1} twice or using \code{eval}. 
+\code{eval} can be compared to \code{share}\footnote{https://hackage.haskell.org/package/explicit-sharing-0.9/docs/Control-Monad-Sharing.html}
+whichs allows explicit sharing for action results.
+
+Even though \code{eval} allows us to use a readTVar action twice, there are still problems. The previous example
+would creates log entries for \code{t2} and \code{t3} that both yield the same \code{IO} action. The \code{IO} 
+action that IO-reads \code{t1}. In the commit phase these action are evaluated. This includes that the actual 
+TVar is read twice because the action is present in two log entries. At the first glance it does not seem to
+be an issue, but also pure computation are duplicated as the following example emphasises:
+\begin{lstlisting}
+shareless t1 t2 t3 = do 
+  act <- eval $ pure sqrt <*> readTVar t1
+  writeTVar t2 act
+  writeTVar t3 act
+\end{lstlisting}
+In this example the pure function \code{sqrt} is also evaluated twice. This is necessary in general because the 
+IO-read (created by readTVar) could return different values depending on the time it is executed. For our case
+we know that this is not the case. Both IO-reads are performed in the commit phase. At this time the TVar \code{t1} is 
+locked. Thus the actual value of \code{t1} cannot change (as long as we do not change it ourself). 
+
+The core problem is that Haskell does not allow sharing on \code{IO} actions drirectly. There is a way to enable 
+sharing on \code{IO} actions: \code{unsafePerformIO}. These actions are considered as pure values, 
+hence their results are shared as any other pure value in Haskell. While using using \code{unsafePerformIO}
+to implement the sharing in the applicative solution, we discovered that it can replace the whole need for 
+Applicative. Since the usability of the applicative solution was still worse than the usability of the 
+original implementation, we discarded the applicative implementation and created the implementation that
+is presented in the main part of this thesis.
+
+

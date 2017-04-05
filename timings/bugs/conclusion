@@ -1,8 +1,0 @@
-For long running expensive transactions it is worth the overhead,
-but for short running transactions additional optimazations are required.
-In the new implementation some perfromance issues must be mentioned.
-   reads after locking
-   garbage should a set
-   locking is expensive (8sec vs 26sec example)
-   wrapping and unwrapping of value (Maybe) is overhead
-   multiple notifications

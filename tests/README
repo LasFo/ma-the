@@ -1,0 +1,9 @@
+To test all terminating test load terminatingTests.hs with 
+an implementation of STM you want to test.
+
+All tests import a library called STM. To load another STM 
+library you either have to rename that library or 
+change the import in the source code of each test. 
+
+Each test prints its desired output before executing.
+USe this output to figure out if the tests work.
