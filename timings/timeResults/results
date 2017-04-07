@@ -1,5 +1,5 @@
      +RTS -N4            StmTest(20,1000,200,50)  StmTest(20,2000,200,25)  StmTest(20,500,200,100)
-Control.Concurrent.STM       3.2978                    3.3845                      3.1780
+Control.Concurrent.STM       3.1780                    3.3845                      3.2978 
 Project.STMP                 3.5645                    3.5700                      3.8540
 Master.STMLA                 3.5340                    3.6335                      3.5905
 Master.STMWSL                3.6655                    3.6665                      3.7910

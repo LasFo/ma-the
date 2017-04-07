@@ -8,14 +8,20 @@ All outputs of this thesis are stored in the GitHub \url{https://github.com/LasF
 The structure is as follows:
 \begin{itemize}
  \item \code{tests} contains the tests that were developed during the thesis. Most of thes test were
-                    used to test for specific bug during the development process. Thus some of these
+                    used to test for specific bugs during the development process. Thus some of these
                     test seem unnecessary. The subdirectory contains
                     tests that run indefinitely. 
  \item \code{implementation} contains the implementations STMWSL, STMLA and the Project implementation.
                              It does not contain the GHC implementation. Since it is no longer part of 
-                             the standart libraries of GHC 8.0.1, it can be downloaded with \code{cabal}\footnote{\url{https://www.haskell.org/cabal/}}
+                             the standard libraries of GHC 8.0.1, it can be downloaded with \code{cabal}\footnote{\url{https://www.haskell.org/cabal/}}
  \item \code{recavoid} contains ideas and challenges for the problem of unnecessary recomputations.
  \item \code{stm} contains all code that were developed during the the first part of this thesis that is described in Appendix \ref{AppendixA}.
  \item \code{timing} contains the ressources that were used for the performance tests.
  \item \code{others} contains a documentation, this written part and slides for a talk.
 \end{itemize}
+
+The implementation was developed and tested with GHC 8.0.1. Other version were not tested. There 
+is no guarantee that the implementation works for other versions. Serveral libraries are used 
+within the implementation. All used libraries are part of the standard Distribution of GHC. 
+The only library that is used but not in the standard Distribution is \code{Data.Tuple.Select}. 
+There cabal package \code{tuple} includes this library. 

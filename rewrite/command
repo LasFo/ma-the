@@ -1,1 +1,0 @@
-ghc --make -ddump-rule-firings -O2 rewriteTest.hs

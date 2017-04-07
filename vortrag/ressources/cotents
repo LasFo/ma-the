@@ -1,5 +1,0 @@
-motivation (account with MVar => TVars => no branch => no rollback needed)
-current implementation
-unnecessary rollback/recomputations
-what i've done until now and how
-what coming up next
