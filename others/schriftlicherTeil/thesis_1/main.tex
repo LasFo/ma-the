@@ -196,8 +196,8 @@ To ultilize multicore processors to their full extend it is needed to write mult
 hand requires synchronization between the threads. While lock based synchronization concepts yield the problem of deadlocks,
 are lock-free primitives often hard to use. Thus software transactions were developed, a way to avoid both of these problems 
 for a drawback in performance. Haskell also offers an implementation for software transactions, called STM. It is implemented
-as an Haskell library that makes use of C primitives and provides a clear interface. 
-In this thesis I analyzes the problems that lead to unnecessary rollbacks.  
+as a Haskell library that makes use of C primitives and provides a clear interface. 
+In this thesis I analyze the problems that lead to unnecessary rollbacks.  
 Furthermore do I provide a sulotion to avoid these problems and present an alternative pure Haskell implementation that
 offers the same interface as the original library. The performance
 of the different implementations is compared and the results are presented here as well. These results show the success of the new 

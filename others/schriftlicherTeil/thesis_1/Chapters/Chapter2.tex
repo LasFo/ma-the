@@ -7,11 +7,11 @@
 %----------------------------------------------------------------------------------------
 In this Chapter we will explore an Approach to handle the problem of \keyword{Unnecessary Rollbacks} described in \ref{Prob:UnRo}.
 Before we can understand a solution to this problem we need to analyze the technical reason more precisely. 
-I was not able to find an satisfying solution for the problem of \keyword{Unnecessary Recomputations}. In 
+I was not able to find a satisfying solution for the problem of \keyword{Unnecessary Recomputations}. However, in 
 Chapter \ref{Chapter5} ideas to solve this problem are discussed.
 
 \section{Unnecessary Rollbacks}
-Remember the idea given in \ref{Prob:UnRo}. We suggested to delay the readTVar operations to the commit
+Remember the idea given in \ref{Prob:UnRo}. We suggested to delay the \code{readTVar} operations to the commit
 phase rather than executing them immediately in the computation
 phase. While the idea works for the example of a normal \code{transfer}, the idea does not work 
 for the following example:
@@ -33,7 +33,7 @@ control flow or not. The current implementation does not do this. The main probl
 operator: \code{>>= :: STM a -> (a -> STM b) -> STM b}. This operator allows us to extract the result of an STM action 
 from the STM context, for example the result of a \code{readTVar}. This means the STM library loses any possibility to 
 observe this value. The value is no longer in the libraries reach. Thus the library is not able to decide if 
-the value is used to alter the control flow. Furthermore the library is not able to determine if the control
+the value is used to alter the control flow. Furthermore, the library is not able to determine if the control
 flow alters when the value is modified. The only way to guarantee the ACI properties is to restart the 
 transaction when the TVar is modified. Otherwise the consistency may be violated.
 
@@ -85,7 +85,7 @@ transaction =
 In this example the value in the condition of the first \code{if} expression depends on \code{a}, but not
 on \code{b}. The value in the condition of the second \code{if} on the other hand 
 depends on \code{a} and \code{b}. If \code{a} is greater or equal to \code{5}, only \code{t1} is critical
-in this transaction, otherwise \code{t1} and \code{t2} are critical in this trasaction. However, the time 
+for this transaction, otherwise \code{t1} and \code{t2} are critical for this trasaction. However, the time 
 \code{t1} and \code{t2} are critical is different because \code{t1} becomes critical when the first \code{if} 
 condition is evaluated and \code{t2} when the second \code{if} condition is evaluated. \code{a} is \textbf{not} 
 evaluated again when the second \code{if} condition is evaluated. Every TVar is read at most once per 
@@ -96,7 +96,7 @@ multiple \code{readTVar} operations on the same TVar, the actual TVar is accesse
 At the end of the computation phase all reads that are needed to decide the control flow are evaluated. 
 %Interestingly this is exactly the case when Haskell demands the evaluation of the values. 
 All other reads are not relevant for the control flow and thus not evaluated. 
-In the \code{transfer} example no \code{readTVar} is evaluated in the computation phase, because neither of the 
+In the \code{transfer} example no \code{readTVar} is evaluated in the computation phase because neither of the 
 TVars is used to decide the control flow.
 
 Lets refrain from STM and concurrency for a second. This kind of evaluation is well known in Haskell. There 
