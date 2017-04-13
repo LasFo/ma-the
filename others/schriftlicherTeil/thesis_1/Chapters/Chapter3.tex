@@ -511,4 +511,49 @@ This is why I consider one memory access to be enough for the entry.}. This is r
 log only consists of TVars that are needed to determine the control flow. So validation is significantly faster
 than locking. 
 
+\subsubsection{Nested TVar}
+To use newly created TVars it is necessary to share these with other threads. The mean to exchange data in STM 
+are TVars. Hence it is not uncommon to have nested TVars when using STM. When using nested TVars in the alternative
+implementation it is important to know which TVars are evaluated during the computation phase. Take a look at the 
+following example:
+\begin{lstlisting}
+main = do
+  tv <- atomically $ newTVar 42 >>= newTVar 
+  atomically $ readTVar tv >>= readTVar 
+\end{lstlisting}
+This example creates a nested TVar in one transaction and read the inner TVar in the second transaction. In the second
+transaction the outer TVar is critical because the second \code{readTVar} uses pattern matching to extract values from 
+the inner TVar. Thus the value of the outer TVar is used within a branch condition. Although the pattern matching
+of \code{readTVar} has only one case Haskell forces the evaluation of the the expression that is passed to \code{readTVar}.
+The value of the inner TVar on the other hand is not used and thus not evaluated. Hence, the inner TVar is not critical.
+
+This can be extended for further nested TVars as in the following example:
+\begin{lstlisting}
+main1 = do
+  tv <- atomically $ newTVar 42 >>= newTVar >>= newTVar 
+  atomically $ readTVar tv >>= readTVar >>= readTVar 
+\end{lstlisting}
+In this example the outermost and the second outermost are critical in the second transaction. In general all but the 
+innermost TVar are critical. Furthermore, this holds for all kinds of unfailable pattern matching. These force the 
+evaluation of the passed expression although unfailable pattern matching is not a branch. Thus the following example
+also evaluated the IO-read and makes the TVars critical:
+\begin{lstlisting}
+main2 = do
+  tv <- atomically $ newTVar (4,2)
+  atomically $ do
+    p <- readTVar tv
+    if one p
+       then return 3
+       else return 5
+ 
+one :: (a,b) -> Bool
+one (_,_) = True
+\end{lstlisting}
+We first create a TVar that hold a pair. In the second transaction we pattern match on this pair with the function \code{one}.
+The value of the pair are not used in \code{one} and the pattern matching cannot fail. Nevertheless, the evaluation of \code{p}
+is forced. Thus \code{tv} is critical in the second transaction. Note that these semantics have nothing to do with my implementation.
+This is an implementation issue of the lazy evaluation in GHC. To explain the evaluation strategy of GHC in detail is not aim
+of this thesis. To use STM it is important to note that even unfailable patter matching forces the evaluation of its argument.
+
+
 
