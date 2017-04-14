@@ -19,14 +19,14 @@ The general scheme of STMWSL in the commit phase is the following:
 \end{enumerate}
 STMWSL processes the writeSet multiple times to achieve this scheme. When locking the written TVars the
 implementation needs to find out which TVars were written and thus processes the whole writeSet. After 
-that the implementation locks the TVars that are written. Additionally are these TVars validated in
-case they were read. This includes that the readSet (see Section \ref{STMTypes}) is processed.
+that the implementation locks the TVars that are written. Additionally, these TVars are validated in
+case they were read. This includes that the readSet is processed.
 The validation of these TVars is needed at this point because after the TVars are locked no
 furhter reading (and hence validation) is possible. This is the first performance issue.
-It is not needed to devide this into two phases. The locks for the TVars could be acquired at the
+It is not needed to divide this into two phases. The locks for the TVars could be acquired at the
 same time the writeSet is processed to find out which TVars need to be locked. Another solution to
 this problem is to refrain from explicitly evaluating the unevaluated reads. By processing the writeSet
-all reads that are needed are evaluated (all but the ones that are needed for the result of the transaction).
+all reads that are needed are evaluated (all, but the ones that are needed for the result of the transaction).
 In other words, the current implementation needs for the second and third part about \code{(2*read + accessed + written)}
 operations. \code{read} denotes the number of different TVars that were read during the transaction, \code{accessed}
 is the size of the writeSet and \code{written} is the number of different TVars that were written.
@@ -42,10 +42,10 @@ value itself remains unevaluated. The drawback is that we need to create new IOR
 This is a significant overhead that the original implementation does not has. The original implementation uses its 
 compiler integration and compares the values directly without evaluating them. Haskell values are represented as 
 pointers. These pointers can be accessed and compared by the GHC implementation thanks to their use of C primitives 
-and compiler integration. In a high level Haskell library the only way to compare the pointer of value is by using
+and compiler integration. In a high level Haskell library the only way to compare the pointers of expressions is by using
 \code{reallyUnsafePtrEquality\#}. As the name suggests the results of this function may vary, because pointer in Haskell
-have a very limited validity. The garbage collector sometimes rearrange values in the head. This also changes the 
-pointers of the values. 
+have a very limited validity. The garbage collector sometimes rearrange values in the heap. This also changes the 
+pointers of the values. These pointer are different from the pointers the GHC implementation uses.
 
 Besides these performance issues, there is a bug is the implementation. The problem is the second validation. 
 This implementation uses a locking mechanism that prevents all threads from reading the TVars once they are locked.
@@ -75,17 +75,17 @@ finished the third phase of the commit scheme. If now either of the Threads try 
 read a locked TVar (the TVar locked by the other thread). This results in the threads suspension. This 
 shows the potential for deadlocks in this implementation. Fortunately, in the current implementation is
 another bug that prevents the second validation to work and thus this deadlocks did never occurred.
-Unfortunately this also violates the ACI properties. Small tests have schown that it is possible to 
+Unfortunately, this also violates the ACI properties. Small tests have shown that it is possible to 
 cause a lost update. Before validating the second time, we need to remove the locked TVars from the 
 readSet to avoid that a transaction deadlocks itself. For example if the transaction locked TVar \code{t1}
 it does not need to validate it because locking always includes validating. On the other hand if we try to
-validate the TVar after it is locked, the transaction deadlocks. The before validating the second time 
+validate the TVar after it is locked, the transaction deadlocks. Before validating the second time 
 we used \code{IntMap} operations to remove all entries from the readSet that are also in the writeSet. 
 The readSet is a subset of the writeSet and thus the validation was performed on the empty readSet.
 To fix this bug requires to identify the written TVars and remove them from the readSet. This on the other
 hand require the transaction to process the writeSet once more and thus is a significant overhead. 
 
 These obeservations suggest that a change in the \code{StmState}. We need an efficient way to access 
-the written TVars, which does not require to process the whole writeSet. To avoid the deadlock on the other hand,
+the written TVars that does not require to process the whole writeSet. To avoid the deadlock on the other hand,
 requires either recursive helping as suggested in \parencite{lockfreedom} or the transaction needs to 
 rollback if it tries to access a locked TVar are in the original implementation.
