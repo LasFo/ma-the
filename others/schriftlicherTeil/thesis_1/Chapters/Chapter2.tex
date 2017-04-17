@@ -5,7 +5,7 @@
 \label{Chapter2} % For referencing the chapter elsewhere, use \ref{Chapter1} 
 
 %----------------------------------------------------------------------------------------
-In this Chapter we will explore an Approach to handle the problem of \keyword{Unnecessary Rollbacks} described in \ref{Prob:UnRo}.
+In this Chapter we will explore an approach to handle the problem of \keyword{Unnecessary Rollbacks} described in \ref{Prob:UnRo}.
 Before we can understand a solution to this problem we need to analyze the technical reason more precisely. 
 I was not able to find a satisfying solution for the problem of \keyword{Unnecessary Recomputations}. However, in 
 Chapter \ref{Chapter5} ideas to solve this problem are discussed.
@@ -40,7 +40,7 @@ transaction when the TVar is modified. Otherwise the consistency may be violated
 If the library handles a value that is \textbf{not} used for branch conditions as if it were used for branch conditions, 
 it may lose performance, but preserves the correctness. We already know an example for this. When we introduced
 STM in \ref{STMInterface}, we examined two transactions executing \code{transfer}. In \ref{Prob:UnRo} we detected
-that this would roll back at least one of these transactions. 
+that at least one of these transactions is rolled back. 
 
 
 If the library on the other hand handles a value that \textbf{is}
@@ -49,7 +49,7 @@ the ACI properties. Thus GHC handles all values as if they are used for branch c
 of the implementation. Take for example \code{limitedTransfer acc1 acc2 50} and assume the initial value of \code{acc1} is 60. 
 The transaction executes \code{read acc1} (and does not handle this TVar as a critical TVar) and determines the 
 branch condition to be false. Then another transaction withdraws \code{20} from \code{acc1}. Afterwards the initial  
-transaction resumes and completes its computation phase. Since no TVars are critical the validation succeeds and
+transaction resumes and completes its computation phase. Since no TVars are critical, the validation succeeds and
 the transaction continues. The behaviour depends on the semantics of \code{readTVar}. Either the TVar is read now
 (in the commit phase) or the TVar is not evaluated, since it was already evaluated to determine the branch condition.
 If the TVar is read again and the update is commited, the new value of \code{acc1} is \code{-10}. Certainly nothing
@@ -114,8 +114,8 @@ specify when a TVar is read. We just specify the origin of the value and the eva
 underlying system. Since the computation phase is processed in the STM monad, there are no IO actions allowed.  
 This implies the only time we need to evaluate an expression is when we need to decide a branch condition. 
 Everytime we execute other computations on TVar values and write them back or return them, this is not executed 
-in the computation phase, because it is not needed. 
-By evaluating only the reads that are needed and just before they are needed we minimize the time the TVars are critical. 
+in the computation phase because it is not needed. 
+By evaluating only the reads that are needed and just before they are needed, we minimize the time the TVars are critical. 
 Figure \ref{fig:lessCriticalValue} shows the effect on \code{limitedTransfer acc1 acc2 5}\footnote{We 
 assume that \code{srcBal} is greater than 5.}. 
 \begin{figure}
@@ -125,7 +125,7 @@ assume that \code{srcBal} is greater than 5.}.
 \caption[Less Critical Value]{The critical time of the TVars in \code{limitedTransfer} with the alternative approach.}
 \label{fig:lessCriticalValue}
 \end{figure}
-The TVar \code{acc2} is not critical at any point in the transaction, because it is not needed for the control 
+The TVar \code{acc2} is not critical at any point in the transaction because it is not needed for the control 
 flow. \code{acc1} on the other hand becomes critical at the time its value is used to evaluate the branch
 condition \code{(srcBal < am)}.
 
