@@ -13,36 +13,36 @@
 \newcommand{\file}[1]{\texttt{\bfseries#1}}
 \newcommand{\option}[1]{\texttt{\itshape#1}}
 
-Modern computer architecture includes multicore processors. To utilize these multicore system to their full extend, concurrent and parallel programming is needed.
-By this new challenges arise. There are technical challenges. For example a new scheduler is needed and hardware accesses (Printer, Display, etc.) need to be 
+Modern computer architecture includes multi core processors. To utilize these multi core system to their full extend, concurrent and parallel programming is needed.
+By this new challenges arise. For example a new scheduler is needed and hardware accesses (Printer, Display, etc.) need to be 
 coordinated. These are challenges the operating system usually handles. There are other challenges the operating system cannot handle, because they are specific 
 for every program.
 
 One challenge is the splitting of the problem in smaller problems which can be processed by different threads in parallel. This challenge is very specific
 to each problem and there is no general solution for it. 
 The most discussed challenge is the synchronization. If a program works with multiple threads, these threads usually communicate. Communications means to 
-exchange data. Even a simple statement like an assignment can cause problems when used in the parallel threads. The problem is that these operations are
-non atomic operations. Thus (\code{x = x + 1}) consist of three parts. first reading the old value, second adding \code{1}, and thrid write the new value.
-This means two threads in parallel can both read the old value, then both add \code{1} to the old value, and then write back the new value. 
+exchange data. These data exchanges need to be synchronized to avoid a misbehaviour. Even a simple statement like an assignment can cause problems when used by parallel threads. The problem is that these operations are
+non atomic operations. Thus (\code{x = x + 1}) consists of three parts. First reading the old value, second adding \code{1} and thrid write the new value.
+This means two threads in parallel can both read the old value, then both add \code{1} to the old value and then write back the new value. 
 The new value is the initial value incremented by \code{1}, even though two threads executed an increment operation on this value. 
 This non inteded behaviour is called \keyword{lost update}. The efforts to avoid such non intended behaviour are called synchronization.
 
-Although multicore processors are new, the research in the field of synchronization has a long history, starting with \parencite{semaphore}, who
+Although multicore processors are new, the research in the field of synchronization has a long history, starting with \parencite{semaphore} who
 introduced the most basic synchronization tool, the semaphore. The semaphore is a abstract datatype which holds an Integer as state and provides two 
 \keyword{atomic} operations, \code{P} and \code{V}. If the value of the semaphore is greater than \code{0}, \code{P} decrements the semaphore. If the value of 
 the semaphore is \code{0}, the thread that evoked \code{P} is suspended. When a thread evokes \code{V} the value of the semaphore is increased and
 in the case another thread is currently suspended, because it called \code{P} on the semaphore, that thread resumes. When the thread 
 resumes, it tries \code{P} again. 
 
-This seem to be a simple construct, but its capabilities are enormous. It is highly complex to use a semaphore correctly.
+This is a simple construct, but its capabilities are enormous. It is highly complex to use a semaphore correctly.
 The main problem of semaphores is the so called deadlock\footnote{In the course of this thesis I will refer to deadlocks as a static propertie rather than a state of a system.}. 
-This means there is a schedule, where no progress of the systen is possible, because all threads are waiting for a semaphore. The term deadlock is not exclusive for semaphores.
+This means there is a schedule where no progress of the systen is possible because all threads are waiting for a semaphore. The term deadlock is not exclusive for semaphores.
 It is used for all blocking mechanisms. Avoiding deadlocks is very hard even when using one or few semaphores. 
 It is nearly impossible to avoid deadlocks when you try to compose semaphore based functions.
 
 To avoid the problems of semaphores while maintaining the expressiveness of semaphores in Haskell, software transactions were introduced \parencite{STMBase}.
 Sofware transactions are inspired by the long known database transactions \parencite{DBTrans}. Software transactions in Haskell provide an interface to program with 
-single element buffers. If you are using this interface the underlying implementation ensures the \keyword{ACI(D)} properties.  
+single element buffers. If you are using this interface, the underlying implementation ensures the \keyword{ACI(D)} properties.  
 % \textbf{A} for atomicity.
 % This means a transactions appears to be processed instantaneous. \textbf{C} for consistency. This means that a consistent view of the system is always guaranteed.
 % \textbf{I} stands for isolation. If multiple thread work on the same data they do not influence each other indirectly. The only way threads can influence each other 
@@ -50,13 +50,13 @@ single element buffers. If you are using this interface the underlying implement
 % \textbf{D} stand for durability, but is relevant only for data base transactions. 
 
 There is a stable implementation for software transactions in Haskell, namely Software Transactional Memory (called STM in the following). The STM library provides 
-an interface which allows the user to process arbitrary operation on one element buffers. The operations can be grouped to \keyword{transactions}.
-When a transaction is executed the library ensure the ACI(D) properties. This is done by optimistically executing the transaction.  
+an interface which allows the user to process arbitrary operation on one element buffers. The operations can be composed and executed as \keyword{transactions}.
+When a transaction is executed the library ensures the ACI(D) properties. This is done by optimistically executing the transaction.  
 If a conflict is detected, the changes of the transaction are discarded and the transaction is restarted (also called rollback). 
 This works, but is not optimal with regards to efficiency and performance. There are two problems. First the conflict detection. Sometimes the implementation detects 
 a conflict and evokes a rollback, even though it is not necessary. The second problem is the rollback mechanism. Regardless the conflict, always the whole transaction
 is reexecuted. This includes operations on data that has not changed, thus an unnecessary recomputation. These problems are discussed in detail in Chapter \ref{Chapter1}. 
 The aim of this thesis is to provide an alternative implementation that avoids these problems while preserving the ACI(D) properties. Chapter \ref{Chapter2} provides 
-concept to solve one of these problems, while Chapter \ref{Chapter3} discusses the implementation of this concept. The performance of the alternative implementation is 
+a concept to solve one of these problems, while Chapter \ref{Chapter3} discusses an implementation of this concept. The performance of the alternative implementation is 
 examined in Chapter \ref{Chapter4}. The last Chapter provides an overview of related work and gives several directions for improving the alternative implementation. 
 In the final part of the last Chapter the thesis is summarized and concluded.
