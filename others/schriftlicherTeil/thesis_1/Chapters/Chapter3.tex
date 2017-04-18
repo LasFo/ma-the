@@ -329,7 +329,7 @@ we will refer to the first implementation as STMLA (STM lock all) and the second
 
 STMLA starts the commit phase by locking all TVars the were accessed. This implementation 
 uses the explicit locks of the TVars. The information about which TVars were accessed are 
-stored in the \code{writeSet} since \code{writeTVar} as well as \code{readTVar} extend 
+stored in the \code{writeSet} since \code{writeTVar} and \code{readTVar} extend 
 the \code{writeSet}.
 When all locks are acquired, the transaction validates its \code{readSet}.
 If this is not valid, the transaction is rolled back.
