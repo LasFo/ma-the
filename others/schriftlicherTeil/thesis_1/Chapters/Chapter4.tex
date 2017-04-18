@@ -8,7 +8,7 @@ its biggest disadvantage with regards to performance testing. STM is a universia
 synchronization problems can be solved with STM. This on the other hand means there
 is no clear way to test STM, especially when measuring the performance. Thanks to
 the moderate interface, testing the correct behaviour of STM is practicable. Although testing 
-is no guarantee that the implementation is correct in all regards, but it narrows the 
+is no guarantee that the implementation is correct in all regards, it narrows the 
 space for bugs. I wrote a number of small tests to test the implementations for specific bugs.
 However, we will not investigate these correctness tests.
 
@@ -17,7 +17,7 @@ Unfortunately, testing the performance is extremely difficult. There are unlimit
 possibilities to use STM. Thus it is not possible to test the performance in general.
 We can only test the performance for specific cases. Thus it is impossible to say which 
 implementation has the best performance in general. To be able to classify the differnt 
-tests and to compare the differnt test to each other, we use the following properties: 
+tests and to compare the different test to each other, we use the following properties: 
 \begin{itemize}
  \item costs of a transaction
  \item level of currency
@@ -36,7 +36,7 @@ concurrency is givin if there are many transactions which are reading and writin
 TVars. Read-only TVars are not considered, because reading them cannot result in a rollback.
 Furthermore, if every transaction works on different TVars, there is no concurrency at all. If there 
 is only one transaction, there is also no concurrency. Thus only if all three requirements are satisfied,
-we speak of a high level of concurrency. The higher the level of concurrency the higher the chance 
+we speak of a high level of concurrency. The higher the level of concurrency the higher the chance that
 a transaction is rolled back in the original implementation. This cannot be meassured in numbers, but we use this term
 to compare different tests in a relative way.
 
@@ -64,7 +64,7 @@ each thread executes. \code{tvars} is the number of TVars that are created and u
 and read operations per transaction. We use these parameters in the following as variables for integers.
 StmTest starts by creating \code{tvars} TVars. Then \code{threads} threads are created. Each thread chooses \code{changes} TVars randomly from all 
 created TVars (the same TVar may be chosen multiple times). Then the thread starts a transaction. In this transaction the thread reads each of the chosen 
-TVars, increments their value and writes the new value back to the TVar. This is repeated \code{iterations} times. When every forked thread has finished the
+TVars, increments their value and writes the new value back to the TVar. This is repeated \code{iterations} times. When every forked thread has finished, the
 main thread reads all TVars and sums their values. If the STM system is correct, the sum is (\code{threads * iterations * changes}).
 
 By altering the parameters the level of concurrency and the costs per transaction can be controlled. More \code{threads} and less 
@@ -82,11 +82,11 @@ That is why we use a second Test to meassure the performance.
 \keyword{PerformanceTest} is a test to meassure the performance and not the correctness. In contrast to StmTest is has not four but
 five parameters:
 \begin{itemize}
- \item threads
- \item iterations
- \item tvars
- \item rWRatio
- \item writes
+ \item \code{threads}
+ \item \code{iterations}
+ \item \code{tvars}
+ \item \code{rWRatio}
+ \item \code{writes}
 \end{itemize}
 The first three parameters are the same as in StmTest. \code{rWRatio} determines the ratio between reads and writes. For example, if
 the \code{rWRation} is \code{5}, the threads perform five reads for each write. \code{writes} on the other hands specifies
@@ -100,7 +100,7 @@ threads creates \code{writes} lists ramdomly with \code{rWRatio} TVars in each. 
 sums their values and writes them back to the first entry of that list. All lists are processed in a single transaction. 
 This procedure is repeated \code{iterations} times. Since the TVars are choosen randomly, we cannot determine if the final state
 of the TVars is correct after all threads have finished. Another difference between the two tests is that StmTest uses a list to 
-store and lookup the TVars while PerformanceTest uses an \code{IntMap}.
+store and look up the TVars while PerformanceTest uses an \code{IntMap}.
 
 To meassure the execution time of the implementations the unix \code{time} command is used\footnote{\url{https://en.wikipedia.org/wiki/Time_(Unix)}}.
 The test (either StmTest or PerformanceTest) are compiled with GHC 8.0.1\footnote{\url{https://www.haskell.org/ghc/download_ghc_8_0_1}} and the 
@@ -138,8 +138,8 @@ The first column contains the test and its configuration.
 StmTest(threads,iterations,tvars,changes) means the \code{StmTest} was applied with the previously explained configuration parameters.
 PerTest(threads,iterations,tvars,rWRatio,writes) is the same for \code{PerformanceTest}. The first row introduces the different 
 implementations. GHC is the current library in GHC 8. Project is the highlevel library that this thesis is based on.
-STMLA and STMWSL are described in the previous chapter. For unknown reasons STMWSL performs poorly in this tests.\footnote{We 
-analyze problems and potential performance issues of STMWSL in Appendix \ref{AppendixB}}
+STMLA and STMWSL are described in the previous chapter. For unknown reasons STMWSL performs poorly in this tests\footnote{We 
+analyze problems and potential performance issues of STMWSL in Appendix \ref{AppendixB}.}.
 
 In the first three tests we examined how changes in the costs of a transaction and the level of concurrency effect the runtime of the four systems. 
 The number of threads and TVars are fixed. By altering the \code{changes} parameter, we increase the workload per 
@@ -171,7 +171,7 @@ GHC and Project implementations are increasing. The runtime of STMLA remains sim
 Interesting is that the runtime of STMWSL is lower than before, but still not comparable to the runtime of STMLA.
 This result is not surprising because the increase in concurrency does not effect STMLA. STMLA does not roll back at
 all in this test and thus the configuration has no effect on the runtime. The GHC and Project implementation do
-roll back. Hence a increase in runtime when increasing the level of concurrency is reasonable.
+roll back. Hence, an increase in runtime when increasing the level of concurrency is reasonable.
 
 While the results of the first three tests seem not very promising the alternative implementation, the results
 of the last three tests reveal an application where STMLA outperforms even the GHC implementation which is 
@@ -217,7 +217,7 @@ its unstable execution time in this test series. Nevertheless, it still performs
 \label{fig:scaling2}
 \end{figure}
 
-The result of the scaling tests performed with \code{PerformanceTest} is presented in Figure \ref{fig:scaling2}. The configuration 
+The results of the scaling tests performed with \code{PerformanceTest} are presented in Figure \ref{fig:scaling2}. The configuration 
 is as follows: 500 transactions per thread, 200 TVar stored in an \code{IntMap}, five times more reads than write and
 five writes per transaction (25 read operations per transaction). The results are similar to the previouse results. All implementation scale equally while
 GHC is a slightly faster and STMWSL slightly slower. The jitter in the execution time of the GHC implementation is less noticeable than 
@@ -225,7 +225,7 @@ in the first test. The execution time of the project implementation on the other
 in the first test. Nonetheless, the general tendencies are not different. 
 
 This test series show that all implementations are scalable. That GHC performs better than the highlevel implementations
-is not surprising. In contrast to the tests presented in the previouse section, these test consist of small transactions.
+is not surprising. In contrast to the tests presented in the previouse section, these tests consist of small transactions.
 The GHC implementation uses a very light weighted locking scheme. This makes the commit phase of the GHC implementation
 significantly faster than the commit phase of the high level implementations. Thus the fixed (per transaction) overhead
 of the highlevel implementations is higher than that of the GHC implementation. Since these tests use smaller transactions
@@ -241,20 +241,20 @@ the computation is less efficient; it is slower. For example, one test takes 1.6
 and the \textbf{same} test takes 2.3 seconds when executed with \code{N2} (2.6 with \code{N3} and 3.6 with \code{N4}).
 The test consumed in the case of \code{N1} a singel core to its full extend (100\%). When the test runs with \code{N2},
 it uses two cores, but not to their full extend (around 70\% per core). With \code{N3} it is about 50\% per core and 
-with \code{N4} it is about 45\% per core. The system is not utilized by any other process while testing (expect for the 
+with \code{N4} it is about 45\% per core. The system is not utilized by any other process while testing (except for the 
 OS) . Even though the total amount of CPU consumption increases with the number of OS threads, the execution time 
 as a whole slows down. I did not take any efforts to explore the reason for this. This is most likely a problem 
 in the runtime systems and thus goes beyond the scope of this thesis. The fact remains that in this kind of
 setup an increase in OS threads results in a decrease in performance. This \textit{kind of setup} is that most of 
 the code is transactional code. Real worlds programs are usually not structured like these tests. The portion
-of transactional code is far less. Hence this observation does not necessarily mean that STM is useless in 
+of transactional code is lower. Hence, this observation does not necessarily mean that STM is useless in 
 practise. Nevertheless, all tests presented in this section are executed with \code{N4} to allow real parallelism. 
 
 In addition to the runtime performance test, I performed tests to check the implementations for memory leaks. The GHC implementation
 as well as STMLA and STMWSL do not produce memory leaks as far as tested. The Project implementation on the other hand 
 contains a memory leak. When ever a transaction reads a TVar, it enters its \code{retryMVar} to the queue of the TVar.
 This allows other transactions to notify it in case they modify the TVar. If the TVar is never written, but continuously read, this queue grows
-and is never emptied. The transactions themself do not remove the MVar from the queue when they rollback or commit.
+and is never emptied. The transactions themself do not remove the MVar from the queue when they roll back or commit.
 This is for performance reasons because it requires the transaction to search for its own MVar in all TVar queues it 
 has accessed. In STMWSL and STMLA the only time a transaction adds something to the queue is when it executes 
 \code{retry}. Additionally, the transaction removes its MVar from the queue when it is no longer needed. In this 
