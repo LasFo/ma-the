@@ -6,11 +6,11 @@
 
 In this Section we look upon the implementation of the aforementioned changes. Unlike to the original
 implementation this implementation does not use C primitives; it is a pure Haskell library. This brings some advantages 
-and one disadvantages. The disadvantage is the performance as discussed in Chapter \ref{Chapter4}.
+and one disadvantage. The disadvantage is the performance as discussed in Chapter \ref{Chapter4}.
 For the costs of performance we gain a library that is easy to understand and extend. The original 
 implementation is interwoven with the GHC runtime environment. Some STM functions are evoked by 
 the scheduler to ensure the consistency. This makes the library sensitive to changes. 
-To ensure the correctness of such a library is significantly harder than for pure library. 
+To ensure the correctness of such a library is significantly harder than for a pure library. 
 In other words, the devlopment of a pure library is safer
 and faster. \parencite{STMHigh} presented a high level Haskell implementation of STM. Their aim
 was to provide a pure Haskell implementation that is equivalent to original implementation of 
@@ -56,7 +56,7 @@ results:
                   | Success StmState (Maybe a)
 \end{lstlisting}
 The first constructor is used to indicate that \code{retry} occurred. This must be distinguished from 
-\code{InValid}, since \code{orElse} as well as \code{atomically} react differently on these results. If 
+\code{InValid} since \code{orElse} as well as \code{atomically} react differently on these results. If 
 \code{Retry} is returned, \code{atomically} validates and rolls back at an appropriate time; \code{orElse} 
 starts the second transaction. This is the reason \code{Retry} is accompanied by the state.
 The state holds the necessary information about the TVars that the transaction has read. This allows 
@@ -74,7 +74,7 @@ The core data structure of STM in Haskell is the \code{TVar}:
                     (MVar [MVar ()])  --queue
                     (MVar ())         --lock
 \end{lstlisting}
-All TVars have a globally unique identifier called \code{ID}, which is immutable. The \code{MVar (IORef a)} 
+All TVars have a globally unique identifier called \code{ID} which is immutable. The \code{MVar (IORef a)} 
 holds the actual value of the TVar. The MVar is used to allow multiple threads to access and modify the same 
 data structure. This is not possible with pure values in Haskell. The inner \code{IORef} is needed to enable a 
 correct validation, which is explained in detail
@@ -102,23 +102,23 @@ The \code{writeSet} is similar to the log in the GHC implementation. Here it is 
 The keys are the IDs of the associated TVars. The elements contain the \code{expectedValue},
 the \code{newValue}, the \code{actualMVar}, and the explicit lock. The \code{actualMVar} is the value holding 
 MVar and is needed in the commit
-phase when the transaction sucessfully commits to publish its modifications. The \code{expectedValue} 
+phase when the transaction sucessfully commits. The \code{expectedValue} 
 and \code{newValue} are similar to the log entries presented in \ref{sec:GHCImpl}, but their purpose is slighty 
 different. The \code{Maybe} type indicates that the values also can be \code{Nothing}. This holds
 only for the second entry. The first entry has the \code{Maybe} type for the same reason 
 \code{Success} has it. The second entry on the other hand can become \code{Nothing}. This indicates
-that the TVar was read but not written by the transaction. Note that there are two kinds of 
+that the TVar was read, but not written by the transaction. Note that there are two kinds of 
 \textit{read}. The first is that a \code{readTVar} operation is porcessed in the computation phase
 and the second that the current value of the TVar is read. In the original implementation these 
-two occur always at the same time. In the new approach theses kinds of reads occur at different times.
+two occur always at the same time. In the new approach these kinds of reads occur at different times.
 For clearity, from here on I will use IO-reads when I refer to a read from the actual IORef to access
 the current value of that TVar. Since Haskell does not provide a simple solution for inhomogeneous
-containers, I decided to use the type \code{()} and cast all values via \code{unsafeCoerce} before
+containers, I decided to use the type \code{()} and use \code{unsafeCoerce} before
 entering them in the \code{writeSet}. Whenever a value is taken from the \code{writeSet} it
-is casted back to its original type by \code{unsafeCoerce}. The ID of the TVar ensures that 
-the type it was casted from does not differ from the type it is casted to.
+\code{unsafeCoerce} is used again to restore the type. The ID of the TVar ensures that no type
+errors occur.
 
-\code{notifies} holds an IO action that is process when the transaction successfully commits.
+\code{notifies} holds an IO action that is processed when the transaction successfully commits.
 This IO action notifies all transactions that are waiting on a TVar that is modified by the 
 committing transaction.
 
@@ -141,11 +141,11 @@ The exact ussage of this is explained in the next section.
 the queues of the TVars when the transactions processes \code{retry}.
 
 \code{uEReads}(unevaluated read) contains all unevaluated IO-read operations. This is essential to be able to 
-process the IO-reads that where not evaluated in the computation phase. The \code{Maybe} type
+process the IO-reads that were not evaluated in the computation phase. The \code{Maybe} type
 is again used for the same reasons as it is in \code{StmResult}.
 
 This concludes the overview on the data structures used and we now have the necessary foundation
-to understand the implementation of the interface Functions.
+to understand the implementation of the interface functions.
 
 \section{Interface Functions}
 \label{sec:IFFun}
@@ -160,7 +160,7 @@ No ID is assigned twice unless \code{globalCount} overflows. Because the chances
 are narrow, no countermeasures are performed to detect or avoid this problem. 
 
 All MVars are created with \code{newMVar}. This means all MVars are initialized when the TVar is created.
-The queue holds and empty list the lock holds unit and the value holds an IORef with the passed value.
+The queue holds an empty list, the lock holds unit and the value holds an IORef with the passed value.
 In the end the unchanged state as well as the new TVar is returned.
 
 Lets take a look at the following example:
@@ -184,7 +184,7 @@ Implementation. If the TVar is present in the \code{writeSet}, the \code{expecte
 The differences are in the other part of \code{readTVar}. Recall the type of \code{readTVar :: TVar a -> STM a}.
 The result is an STM action. This means a function that takes an \code{StmState} and returns an \code{StmResult}. 
 Unless the result is \code{InValid}, it contains an \code{StmState}. In other words, \code{readTVar} transforms
-the state and returns the value of the TVar. To return the value of the TVar requires to IO-read the
+the state and returns the value of the TVar. Returning the value of the TVar requires to IO-read the
 TVar. To avoid the IO-read at this point, it is not executed directly. The function \code{buildVal} helps us 
 to delay the evaluation.
 
@@ -193,7 +193,7 @@ the value with \code{unsafePerformIO}. \code{unsafePerformIO} allows us to execu
 Haskell code. These IO actions are executed when the evaluation of the expression that they occur in 
 is demanded. In this case the IO action consists of two parts. First, it IO-reads the 
 current value of the TVar and returns it after wrapping in into \code{Just}. The wrapping with 
-\code{Just} is explained when we examine the implementation of atomically. Second, entering the 
+\code{Just} is explained when we examine the implementation of \code{atomically}. Second, entering the 
 information that are needed to validate to the \code{readSet}. These are the ID of the TVar as 
 key, the MVar of the TVar that holds the value, the value that the transaction saw when it IO-reads
 the TVar, and the queue of that TVar. The value the transaction has seen is created by the first 
@@ -219,7 +219,7 @@ transaction = do
   a <- readTVar tv
   writeTVar tv (a + 1)
 \end{lstlisting}
-We explained already the first action. The first step of the second action is to lookup \code{tv}
+We explained already the first action. The first step of the second action is to look up \code{tv}
 in the \code{writeSet}. Since \code{tv} is not present in the \code{writeSet}, \code{buildVal} is
 called to create the \code{unsafePerformIO} action. The result (called \code{val} in the 
 following) is added to the \code{writeSet}. Thus the \code{writeSet} is no longer empty. It contains 
@@ -239,10 +239,10 @@ the modification of \code{notifies}. A successful commit of the transaction mean
 modification to the TVar that \code{writeTVar} was called on. Thus this transaction 
 possibly needs to notify waiting transactions. An IO action is created, that notifies
 all transactions in the queue of the TVar. This IO action is sequenced by \code{>>} with 
-\code{notifies} of the initial \code{StmState}. The resulting action then notifies all
+\code{notifies} of the initial \code{StmState}. The resulting action then notifies all transactions in the queues of all
 TVars that are written by this transaction. This may lead to an action that notifies the 
 same queue twice. This is a minor issue because after the first notification the queue 
-is emptied. To avoid this, you need to lookup the value in the writeSet, to see if 
+is emptied. To avoid this, you need to look up the value in the writeSet, to see if 
 it was already written and if so do not extend the \code{notifies} action. This look up
 is most likely more expensive than a notification on an empty queue (this has not been 
 investigated). 
@@ -251,7 +251,7 @@ The second modification that \code{writeTVar} performs is the modification of th
 After wrapping the value for type reasons with \code{Just}, it is entered in the \code{expectedValue} and \code{newValue} 
 field of the associated entry in the \code{writeSet}. The last field of the entry is the MVar of
 the TVar that holds the value. There is a reason to set both, the first and second field, to the
-new value. If the second field is \textbf{not} \code{Nothing}, it indicates that this value is modified 
+new value. If the second field is \textbf{not} \code{Nothing}, it indicates that this TVar is modified 
 by the transaction and in the case the transaction sucessfully commits, the value in this field
 is written. The first field of the entry is the field that \code{readTVar} returns if it finds
 this entry. To avoid this doubled entry, the obvious choice were to use pattern matching to 
@@ -260,7 +260,7 @@ work in this implementation. The problem is that the pattern matching forces the
 By forcing the evaluation of an expression you may evaluate IO-reads and thus make TVars critical (IO-read them)
 that are not critical. This does not happen in the current implementation because in every entry
 of the \code{writeSet} the first field is always not \code{Nothing} and thus can be returned
-without pattern matching on this value. 
+without pattern matching this value. 
 In the end of \code{writeTVar}, the new state and \code{()} are returned.
 
 For the example it means that the \code{writeSet} and \code{notifies} are modified by the third 
@@ -285,11 +285,11 @@ to the MVars in the queue. It is important to use \code{tryPutMVar} instead of \
 Otherwise the implementation contains a high potential for deadlocks (imagine two transactions try to notify the same 
 transaction at the same time). In the end the queue is emptied to avoid another transaction to 
 notify the same transactions again. The final \code{return ()} is the initial value of 
-\code{notifies}. The result of the three action in the example is:
+\code{notifies}. The result of the third action in the example is:
 \begin{lstlisting}
  Success state ()
 \end{lstlisting}
-\code{state} is a \code{StmState} that contains \code{notifies1}, \code{writeSet2} and the 
+\code{state} is an \code{StmState} that contains \code{notifies1}, \code{writeSet2} and the 
 modified \code{uEReads}. The \code{readSet} and \code{retryMVar} are similar to the one 
 in the initial state. This state is used in atomically to commit the changes.
 
@@ -323,12 +323,12 @@ the other two results.
 There are currently two different implementation as a result of this thesis which 
 only differ in this part. The performance tests presented in Chapter \ref{Chapter4} 
 provide a clear result on which implementation is better in general. Nonetheless, I will present
-both implementation. If it is not clear which implementation we are talking about,
+both implementations. If it is not clear which implementation we are talking about,
 we will refer to the first implementation as STMLA (STM lock all) and the second STMWSL 
 (STM write set lock). 
 
-STMLA starts the commit phase by locking all TVars is has accessed. This implementation 
-uses the explicit locks of the TVars. This information about which TVars were accessed are 
+STMLA starts the commit phase by locking all TVars the were accessed. This implementation 
+uses the explicit locks of the TVars. The information about which TVars were accessed are 
 stored in the \code{writeSet} since \code{writeTVar} as well as \code{readTVar} extend 
 the \code{writeSet}.
 When all locks are acquired, the transaction validates its \code{readSet}.
@@ -338,7 +338,7 @@ by the \code{seq} function which forces the evaluation of its first argument and
 its second argument. As always in Haskell the expression is evaluated to WHNF\footnote{In 
 case you do not know what \keyword{weak head normal form} is please refer to 
 \url{https://wiki.haskell.org/Weak_head_normal_form}}. This is where the \code{Maybe} type 
-comes in handy. \code{buildVal} created a \code{Maybe} value that was wrapped with an
+comes in handy. \code{buildVal} creates a \code{Maybe} value that was wrapped with an
 \code{unsafePerformIO} action. If we force the evaluation of this expression, the 
 IO-read is performed, but the underlying expression is not evaluated. It is wrapped 
 with the \code{Just} constructor. Without this constructor, we would evaluate the expression that 
@@ -348,7 +348,7 @@ Even worse, we execute this in the commit phase while we hold the locks for many
 To maximize parallelism, we aim to minimize the time the TVars are locked. Besides these
 performance problems, there is a serious semantic problem. Everytime we force the 
 evaluation of an expression that is not needed, we change the semantics of the program.
-This may lead to exceptions or loops that would not occur normaly.
+This may lead to exceptions or loops that would not occur normally.
 After the \code{uEReads} are evaluated, the actual writes are prepared. The writes are 
 divided in two parts. First take the value from the MVar and second write the new value.
 Preparing means all the value holding MVars of all TVars that are going to be written
@@ -366,7 +366,7 @@ either read or write these TVars. In the first implementation the explicit locks
 were taken. This does not prevent other transactions from reading these TVars.
 After the writes are prepared, the transaction is validated again. In contrast to 
 the first validation, this validation is mandatory. It is possible that the current
-values of the TVars have changed after the reads were processed and before the 
+values of the TVars have changed after the IO-reads were processed and before the 
 writes were prepared (and by this the TVars locked). The first validation is
 added to avoid the problem that the transaction acquires the locks, although it 
 is invalid. The costs for locking are much higher than the costs for validation.
@@ -381,9 +381,9 @@ the associated TVars are unlocked.
 Both implementation have their own benefits. STMLA does never roll back
 when the transaction does not branch at all. If two transactions read the
 same TVar they cannot commit at the same time in STMLA. In STMWSL it is
-possible that two transaction, that read the same TVar, commit simultaneously
+possible that two transactions, that read the same TVar, commit simultaneously
 (if non of them also writes this TVar). It is also possible
-that a rollback occurs, even if the transaction does not branch. The 
+that a rollback occurs even if the transaction does not branch. The 
 problem is that the remaining reads are evaluated in an unlocked context.
 This means that other transactions can modify these values after they were 
 read and thus invalidate the reading transaction. It would be better, if the
@@ -398,7 +398,7 @@ acquire the locks for the TVars. The clever reader may have noticed that
 we get the values of the TVars when we prepare the writes because we execute
 \code{takeMVar} on the value holding MVars. To use these information would 
 require the \code{unsafePerformIO} actions produced by \code{buildVal} to 
-behave diffrently when it is executed in the computation phase and in the 
+behave differently when it is executed in the computation phase and in the 
 commit phase. Nevertheless, this topic remains for future work and is discussed 
 in Chapter \ref{Chapter5}.
 
@@ -426,7 +426,7 @@ has (thanks to sharing) an effect on the \code{writeSet} as well:
 The next step is to prepare the writes. This means \code{mvar} is emptied via 
 \code{takeMVar}. Before it is filled again, \code{notifies} is executed. \code{notifies}
 does nothing because the \code{waitQ} of \code{tv} is empty. Finally the expression (\code{5 + 1})
-written to \code{mvar}. Note that the expression itself is not evaluated. The last step
+is written to \code{mvar}. Note that the expression itself is not evaluated. The last step
 before returning \code{()} is to release the lock for \code{tv}.
 
 \subsubsection{>>=}
@@ -438,8 +438,8 @@ retain this feature. \code{>>= :: STM a -> (a -> STM b) -> STM b} allows us to
 extract the result of an \code{STM} action from the STM context and use it to create 
 a new STM action. Additionally it is used to translate \code{<-} of the do-notation.
 The implementation is straight forward, but for the sake of completeness presented
-nonetheless. The result is a STM action, meaning that it is a function that takes 
-a \code{StmState} and returns an \code{StmResult}. Thus the function \code{>>=} basically
+nonetheless. The result is an STM action, meaning that it is a function that takes 
+an \code{StmState} and returns an \code{StmResult}. Thus the function \code{>>=} basically
 has three arguments. The \code{STM} action, the function of type \code{a -> STM b},
 and the \code{StmState}. These arguments are called \keyword{passed action/function/state}
 in the following. 
@@ -466,7 +466,7 @@ a action like \code{a <- readTVar t1} would not differ from the original impleme
 because the \code{unsafePerformIO} action would be executed immediately. 
 
 \subsubsection{retry and orElse}
-The implementation of \code{retry} and \code{orElse} are very simple. \code{retry} is a 
+The implementation of \code{retry} and \code{orElse} are very simple. \code{retry} is an 
 STM action and thus gets a state passed. The passed state is wrapped with the \code{Retry} constructor.
 That is all \code{retry} does. 
 
@@ -486,7 +486,7 @@ in this section.
 One Motivation for STM is the deadlock freedom. We have seen in Section \ref{STMInterface} that acquiring 
 multiple locks always includes the danger of deadlocks if multiple threads work concurrently. 
 There are two concepts to avoid deadlocks for such settings. The setting is that multiple threads
-try to acquire and arbitrary number of shared locks. The first avoidance strategy is, if thread tries to 
+try to acquire and arbitrary number of shared locks. The first avoidance strategy is, if a thread tries to 
 acquire a lock that is not available, the thread releases all locks and tries to acquire all locks again.
 This is continued until the thread can acquire all desired locks. The other avoidance strategy is to 
 acquire the locks in a global order. STMLA as well as STMWSL use the latter. The TVars that need to be 
@@ -495,7 +495,7 @@ the \code{IntMap} to a list and processes it. Since the conversion from an \code
 list, the transactions always lock in a global order. The TVars are ordered by their IDs.
 
 
-\subsection{STMWSL}
+\subsubsection{STMWSL}
 The double validation of STMWSL seems to be an unnecessary overhead. However, the original implementation 
 also uses this scheme which was proposed by Fraser \parencite[Page 42]{lockfreedom}. The high costs for locking the TVars
 are the reason. This locking itself is not particular expensive, but it hinders parallelism.
@@ -513,7 +513,7 @@ than locking.
 
 \subsubsection{Nested TVar}
 To use newly created TVars it is necessary to share these with other threads. The mean to exchange data in STM 
-are TVars. Hence it is not uncommon to have nested TVars when using STM. When using nested TVars in the alternative
+are TVars. Hence, it is not uncommon to have nested TVars when using STM. When using nested TVars in the alternative
 implementation it is important to know which TVars are evaluated during the computation phase. Take a look at the 
 following example:
 \begin{lstlisting}
@@ -521,7 +521,7 @@ main = do
   tv <- atomically $ newTVar 42 >>= newTVar 
   atomically $ readTVar tv >>= readTVar 
 \end{lstlisting}
-This example creates a nested TVar in one transaction and read the inner TVar in the second transaction. In the second
+This example creates a nested TVar in one transaction and reads the inner TVar in the second transaction. In the second
 transaction the outer TVar is critical because the second \code{readTVar} uses pattern matching to extract values from 
 the inner TVar. Thus the value of the outer TVar is used within a branch condition. Although the pattern matching
 of \code{readTVar} has only one case Haskell forces the evaluation of the the expression that is passed to \code{readTVar}.
@@ -534,7 +534,7 @@ main1 = do
   atomically $ readTVar tv >>= readTVar >>= readTVar 
 \end{lstlisting}
 In this example the outermost and the second outermost are critical in the second transaction. In general all but the 
-innermost TVar are critical. Furthermore, this holds for all kinds of unfailable pattern matching. These force the 
+innermost TVar are critical. Furthermore, this holds for all kinds of unfailable pattern matching. It forces the 
 evaluation of the passed expression although unfailable pattern matching is not a branch. Thus the following example
 also evaluated the IO-read and makes the TVars critical:
 \begin{lstlisting}
@@ -542,15 +542,15 @@ main2 = do
   tv <- atomically $ newTVar (4,2)
   atomically $ do
     p <- readTVar tv
-    if one p
+    if match p
        then return 3
        else return 5
  
-one :: (a,b) -> Bool
-one (_,_) = True
+match :: (a,b) -> Bool
+match (_,_) = True
 \end{lstlisting}
-We first create a TVar that hold a pair. In the second transaction we pattern match on this pair with the function \code{one}.
-The value of the pair are not used in \code{one} and the pattern matching cannot fail. Nevertheless, the evaluation of \code{p}
+We first create a TVar that holds a pair. In the second transaction we pattern match this pair with the function \code{match}.
+The values of the pair are not used in \code{match} and the pattern matching cannot fail. Nevertheless, the evaluation of \code{p}
 is forced. Thus \code{tv} is critical in the second transaction. Note that these semantics have nothing to do with my implementation.
 This is an implementation issue of the lazy evaluation in GHC. To explain the evaluation strategy of GHC in detail is not aim
 of this thesis. To use STM it is important to note that even unfailable patter matching forces the evaluation of its argument.
