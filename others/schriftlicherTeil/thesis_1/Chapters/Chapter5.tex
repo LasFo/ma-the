@@ -18,7 +18,7 @@ suffice these semantics.
 Another approach to optimize STM is presented by \parencite{pessimisticSTM}. They propose to 
 use a pessimistic approach comparable to data base transactions. This means each time a shared data structure 
 is accessed it is locked. If the transaction tries to acquire a locked data structure it rolls back. 
-This design avoids \textit{shadow copies} of values such as the logs in the Haskell implementations. This avoids 
+This design avoids \textit{shadow copies} of values such as the logs in the Haskell implementations. This obviates 
 a memory overhead and more important it avoids the necessity to look up values in the log. They made 
 assumptions for the ussage of transactions: Most transactions commit successfully and they use far more reads
 than writes. Under these assumptions their implementation performs considerable better than optimistic 
@@ -61,7 +61,7 @@ faster than \code{Integer}. Furthermore, we need to alter the data types used wi
 We used \code{IntMap} for the internal book keeping of the alternative implementation. An \code{IntMap} cannot 
 handle \code{Integers}. The overflow detection can be used in two ways. If the implementation is able 
 to reclaim unused \code{ID}s, it can reuse these. The conflict detection can also terminate the execution to 
-avoid a miss behaviour of the implementation. Currently the implementation does not detect the overflow 
+avoid a misbehaviour of the implementation. Currently the implementation does not detect the overflow 
 and thus may lead to problems in long running systems that use STM.
 
 In Chapter \ref{Chapter4} we discovered that STMWSL perfoms poorly in the performance tests. The reasons for this are 
@@ -75,8 +75,8 @@ it acquires the locks for them. This results in a rollback. If the lock holding 
 to read the TVars, it could evaluate the delayed reads after it acquired the locks and validated. On the
 one hand, this makes the validation less expensive since only the reads that were evaluated in the 
 computation phase are validated. Furthermore, this avoids rollbacks because the values cannot 
-be modified in a manner that it evokes a rollback. After the transaction t1 reads the TVars, it is 
-still possible that another transaction modifies the values that are only read by t1, but not modified.
+be modified in a manner that it evokes a rollback. After a transaction \code{t1} reads a TVar, it is 
+still possible that another transaction modifies this TVar that is only read by \code{t1}, but not modified.
 This is not a violation of the ACI properties and thus would not cause a rollback (see \parencite{lockfreedom}).
 In conclusion, another locking mechanism that allows the lock holder to read the locked structure
 increases the performance of STMWSL significantly. This also adds more complexity to the implementation
@@ -87,7 +87,7 @@ The alternative implementation lacks a sufficient support for exception handling
 raised, this exception is thrown to the caller. This behaviour is not incorrect per se. If the 
 exception is raised because the transaction has seen an inconsistent view of the memory, it is 
 incorrect. When the transaction raises an exception during the execution, the implementation must 
-check whether the transaction is valid or invalid. If it is invalid the transaction have to be rolled 
+check whether the transaction is valid or invalid. If it is invalid the transaction has to be rolled 
 back, otherwise it is a violation of the consistency property. If the transaction is valid, the 
 behaviour is a design decision. Either the transaction is raised to the caller or the transaction 
 handles the exception like a retry, meaning it waits for a change of the read TVars and restarts.
@@ -118,7 +118,7 @@ since STM is a universial tool and cannot be tested easily. Even if the implemen
 enough to replace the current implementation, it can provide an alternative to the current implementation
 which is used for specific cases. Then the user (or compiler) can decide which implementation he wants to use. 
 More importantly the integration
-in the compiler allows the implementation to detect conflict before the commit phase. This is 
+in the compiler allows the implementation to detect conflicts before the commit phase. This is 
 important if the transaction executes an infinite loop because it saw an inconsistent view of the 
 memory. Without an early conflict detection the transaction does not break the loop because it never
 validates before the commit phase. The GHC implementation uses the runtime system to evoke validations
@@ -133,7 +133,7 @@ I was not able to implement a suitable solution for this problem in the time of 
 presented paper \parencite{checkpoint} had some success engaging this problem. To provide a similar 
 solution for Haskell may be possible by redefining the monadic operations \code{>>} and \code{>>=}. 
 The first step is to divide the transaction in the parts that are seperated by \code{>>} or \code{>>=} 
-(the single \textit{statements} of the do-notation). We call these parts chunks for now. The second step 
+(the single statements of the do-notation). We call these parts chunks for now. The second step 
 is to deteremine which TVars are used in which chunks. \code{unsafePerformIO} can be used to do this. 
 \code{>>} and \code{>>=} both execute the first action. During this execution \code{unsafePerformIO} can
 be used to detect the values (and the associated TVars) that are needed to evaluate this chunk. In the
@@ -145,7 +145,7 @@ a lot of book keeping. It needs further research to decide whether this idea wor
 whether it increases the performance despite the book keeping overhead.
 
 \section{Summary}
-In Chapter \ref{Chapter0} we gave a motivation for synchronization in general. To utilize multi-core
+In Chapter \ref{Chapter0} we gave a motivation for synchronization in general. Utilizing multi-core
 processors and guarantee reactivity is mandatory for software nowadays. Multithreading is essential 
 to achieve these objectives. Multithreading also includes dangers such as lost updates or race conditions. 
 These problems are engaged with synchronization tools, starting from semaphores to abstract concepts
@@ -169,11 +169,11 @@ evaluation of IO-reads as far as possible. The result is that IO-reads, that are
 conditions, are delayed to the commit phase and others are evaluated just before they are used.
 
 The main part of this thesis is presented in Chapter \ref{Chapter3}. The implementation of the previously 
-presented idea is described in detail in this Chapter. The STM monad is a state monad and processing a
+presented idea is described in detail in this chapter. The STM monad is a state monad and processing a
 transaction is devided in two phases, the computation phase and the commit phase. In the computation
 phase the state is enriched by the \code{writeTVar} and \code{readTVar} operations. In the commit phase 
 this state is used to validate the transaction an possibly publish its results. To delay the execution 
-of the IO-read and to find out when a value is needed for a branch condition, the values are wrapped 
+of the IO-reads and to find out when a value is needed for a branch condition, the values are wrapped 
 by an \code{unsafePerformIO} action. If this action is not processed in the computation phase, its 
 execution is forced in the commit phase to ensure the reads are evaluated before the transaction 
 finishes. 
@@ -187,9 +187,9 @@ level of concurrency and no TVars are critical, the alternative implementation d
 
 \subsubsection{Conclusion}
 The aim of this thesis was to provide an alternative implementation of STM in Haskell to avoid the 
-problems of unnecessary rollbacks and unnecessary recomputations. The presented implementation 
-is a pure Haskell implementation in contrast to the original implementation that uses C primitives.
-The alternative implementation uses \code{unsafePerformIO} to avoids the unnecessary rollbacks. 
+problems of unnecessary rollbacks and unnecessary recomputations. In contrast to the original 
+implementation that uses C primitives, the presented implementation is a pure Haskell implementation .
+The alternative implementation uses \code{unsafePerformIO} to avoid the unnecessary rollbacks. 
 The previous section discussed an idea to solve the problem of unnecessary recomputations. However, 
 this idea is not implemented and tested in the alternative implementation. The test results have 
 shown that the new implementation performs better than a reference implementation and equally to 
