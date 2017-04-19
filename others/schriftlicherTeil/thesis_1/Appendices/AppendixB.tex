@@ -71,7 +71,7 @@ transaction2 = do
 \end{minipage}
 In STMWSL the following execution is possible. \code{Thread1} executes until it has acquired the lock for 
 \code{t2}. Then \code{Thread 2} executes until it has acquired the lock for \code{t1}. Thus both threads
-finished the third phase of the commit scheme. If now either of the Threads try to validate, it needs to 
+finished the third phase of the commit scheme. If now either of the Threads tries to validate, it needs to 
 read a locked TVar (the TVar locked by the other thread). This results in the threads suspension. This 
 shows the potential for deadlocks in this implementation. Fortunately, in the current implementation is
 another bug that prevents the second validation to work and thus this deadlocks did never occurred.

@@ -50,7 +50,7 @@ STM. We solved one problem by introducing another problem. Nevertheless, I imple
 that uses this scheme and avoided the targeted rollbacks. \code{IO ()} actions were used
 to delay the evaluation\footnote{This implementation did not use \code{unsafePerformIO}. It used monadic \code{IO} actions.}. 
 When \code{>>=} is executed these \code{IO} actions are evaluated. The \code{IO} actions are created by \code{readTVar}.
-Remember that \code{readTVar} creates an STM action. This action can either be used to bind it with \code{>>=} or it 
+Remember that \code{readTVar} returns an STM action. This action can either be used to bind its result with \code{>>=} or it 
 can be used to write another TVar (the value may be modified after read and before written). If it is written to a 
 TVar the \code{IO} action was logged and executed in the commit phase. This solution contained some problems.
 
@@ -65,9 +65,9 @@ swap t1 t2 = do
 \end{lstlisting}
 This swap function does not work because the \code{readTVar} operation in the let expression is evaluated when 
 \code{writeTVar t2 a} is evaluated. At this point the value of \code{t1} is no longer its initial value, but the 
-value of \code{t2}. Hence in the end of the transaction both TVars contain the same value. To solve this problem
-we introduced the function \code{eval :: STM a -> STM (STM a)}. This funcion allows us to evaluate the an 
-\code{STM} action an us it at the same time. It first evaluates the \code{STM} action and then returns a 
+value of \code{t2}. Hence, in the end of the transaction both TVars contain the same value. To solve this problem
+we introduced the function \code{eval :: STM a -> STM (STM a)}. This funcion allows us to evaluate the 
+\code{STM} action and use it at the same time. It first evaluates the \code{STM} action and then returns a 
 dummy action that has no side effects\footnote{Side effects in this context are modifications of the \code{StmState}}. 
 The return value of this is that of the passed action at the point \code{eval}
 was called. For example:
